@@ -88,20 +88,34 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-h
   }'
 ```
 
+**Expected response: HTTP 201 Created** — this is a success, not an error.
+
+Response body:
+```json
+{
+  "agent": { "id": "uuid", "status": "pending_approval" },
+  "approval": { "id": "uuid", "status": "pending" }
+}
+```
+
+If `approval` is `null`, the company does not require board approval and the agent is immediately `idle`.
+
 8. Handle governance state:
-- if response has `approval`, hire is `pending_approval`
-- monitor and discuss on approval thread
-- when the board approves, you will be woken with `PAPERCLIP_APPROVAL_ID`; read linked issues and close/comment follow-up
+
+**If `approval` is present in the response (board approval required):**
+
+- Do NOT poll or retry the hire request — it succeeded.
+- Leave exactly ONE comment on the approval thread summarizing the hire:
 
 ```sh
-curl -sS "$PAPERCLIP_API_URL/api/approvals/<approval-id>" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
-
 curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/<approval-id>/comments" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"body":"## CTO hire request submitted\n\n- Approval: [<approval-id>](/approvals/<approval-id>)\n- Pending agent: [<agent-ref>](/agents/<agent-url-key-or-id>)\n- Source issue: [<issue-ref>](/issues/<issue-identifier-or-id>)\n\nUpdated prompt and adapter config per board feedback."}'
 ```
+
+- Then **stop your current run**. Do not loop, poll, or wait inline.
+- The system will automatically wake you when the board decides. You will receive `PAPERCLIP_APPROVAL_ID` in your next run's environment.
 
 If the approval already exists and needs manual linking to the issue:
 
@@ -112,7 +126,9 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/<issue-id>/approvals" \
   -d '{"approvalId":"<approval-id>"}'
 ```
 
-After approval is granted, run this follow-up loop:
+**When you are woken with `PAPERCLIP_APPROVAL_ID` (board decided):**
+
+Read the approval and linked issues, then act on them:
 
 ```sh
 curl -sS "$PAPERCLIP_API_URL/api/approvals/$PAPERCLIP_APPROVAL_ID" \

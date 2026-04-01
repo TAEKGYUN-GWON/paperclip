@@ -28,6 +28,8 @@ Approval collaboration:
 
 ## `POST /api/companies/:companyId/agent-hires`
 
+**Returns HTTP 201 Created on success** (not 200). Treat any 2xx as success.
+
 Request body matches agent create shape:
 
 ```json
@@ -58,7 +60,7 @@ Request body matches agent create shape:
 }
 ```
 
-Response:
+Response (HTTP 201):
 
 ```json
 {
@@ -77,7 +79,9 @@ Response:
 }
 ```
 
-If company setting disables required approval, `approval` is `null` and the agent is created as `idle`.
+If company setting disables required approval, `approval` is `null` and `agent.status` is `"idle"`.
+
+**Important:** `agent.status: "pending_approval"` is the expected state when board approval is required. This is NOT an error. Do not retry the hire request. Leave one comment on the approval thread and end your current run — you will be woken up with `PAPERCLIP_APPROVAL_ID` when the board decides.
 
 `desiredSkills` accepts company skill ids, canonical keys, or a unique slug. The server resolves and stores canonical company skill keys.
 
