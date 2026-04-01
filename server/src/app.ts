@@ -31,6 +31,7 @@ import { accessRoutes } from "./routes/access.js";
 import { pluginRoutes } from "./routes/plugins.js";
 import { agentMessageRoutes } from "./routes/agent-messages.js";
 import { issueDependencyRoutes } from "./routes/issue-dependencies.js";
+import { coordinatorRoutes } from "./routes/coordinator.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
@@ -159,6 +160,7 @@ export async function createApp(
   api.use(instanceSettingsRoutes(db));
   api.use(agentMessageRoutes(db));
   api.use(issueDependencyRoutes(db));
+  api.use(coordinatorRoutes(db));
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = createPluginWorkerManager();
   const pluginRegistry = pluginRegistryService(db);

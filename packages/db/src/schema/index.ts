@@ -59,3 +59,5 @@ export { pluginLogs } from "./plugin_logs.js";
 export { agentMessages } from "./agent_messages.js";
 export { agentSharedMemory } from "./agent_shared_memory.js";
 export { issueDependencies } from "./issue_dependencies.js";
+export { coordinatorSessions } from "./coordinator_sessions.js";
+export { workerTasks } from "./worker_tasks.js";

@@ -147,6 +147,26 @@ export type IssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 export const ISSUE_DEPENDENCY_KINDS = ["blocks", "relates_to"] as const;
 export type IssueDependencyKind = (typeof ISSUE_DEPENDENCY_KINDS)[number];
 
+// ---------------------------------------------------------------------------
+// Phase 19: Coordinator Mode
+// ---------------------------------------------------------------------------
+
+export const COORDINATOR_SESSION_STATUSES = ["active", "completed", "cancelled"] as const;
+export type CoordinatorSessionStatus = (typeof COORDINATOR_SESSION_STATUSES)[number];
+
+export const WORKER_TASK_STATUSES = [
+  "pending",
+  "spawned",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+] as const;
+export type WorkerTaskStatus = (typeof WORKER_TASK_STATUSES)[number];
+
+export const DELEGATION_STRATEGIES = ["round_robin", "capability_match", "load_balance"] as const;
+export type DelegationStrategy = (typeof DELEGATION_STRATEGIES)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 

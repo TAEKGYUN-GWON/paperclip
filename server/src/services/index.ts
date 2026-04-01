@@ -34,3 +34,13 @@ export { messageBusService, type SendMessageInput, type BroadcastMessageInput, t
 export { sharedMemoryService, type SetMemoryOptions, type ListMemoryOptions, type SharedMemoryEntry } from "./shared-memory.js";
 export { taskGraphService, type AddDependencyInput, type RemoveDependencyInput, type IssueDependency, type TaskGraphBlockedResult } from "./task-graph.js";
 export { dreamTaskService, type ConsolidationResult } from "./dream-task.js";
+export {
+  coordinatorService,
+  type CoordinatorConfig,
+  type DelegationPlan,
+  type DelegationTask,
+  type CoordinatorStatus,
+  type CoordinatorSession,
+  type WorkerTask,
+  type CoordinatorServiceType,
+} from "./coordinator.js";

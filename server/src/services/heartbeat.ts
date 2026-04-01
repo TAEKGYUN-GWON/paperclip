@@ -44,6 +44,7 @@ import {
 import { issueService } from "./issues.js";
 import { taskGraphService } from "./task-graph.js";
 import { dreamTaskService } from "./dream-task.js";
+import { coordinatorService } from "./coordinator.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -2890,6 +2891,22 @@ export function heartbeatService(db: Db) {
           context.paperclipKairosMemory = kairosDigest;
         }
       }
+      // Phase 19: Coordinator Mode — inject orchestrator prompt and status
+      if (issueId) {
+        const coordinator = coordinatorService(db);
+        const isCoord = await coordinator.isCoordinatorAgent(agent.companyId, agent.id);
+        if (isCoord) {
+          const prompt = await coordinator.buildCoordinatorPrompt(
+            agent.companyId,
+            agent.id,
+            issueId,
+          );
+          if (prompt) {
+            context.paperclipCoordinatorPrompt = prompt;
+          }
+          context.paperclipCoordinatorMode = true;
+        }
+      }
       // Phase 8: pre:adapter 훅
       await hookRegistry.emit("pre:adapter", {
         runId: run.id,
@@ -3165,6 +3182,16 @@ export function heartbeatService(db: Db) {
         durationMs: run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
         retryCount: 0,
       }, logger);
+      // Phase 19: Coordinator Mode — notify coordinator when a worker sub-issue completes
+      if (issueId && (outcome === "succeeded" || outcome === "failed")) {
+        try {
+          const coordinator = coordinatorService(db);
+          const mappedOutcome = outcome === "succeeded" ? "succeeded" : "failed";
+          await coordinator.onWorkerComplete(agent.companyId, issueId, mappedOutcome);
+        } catch (coordErr) {
+          logger.warn({ err: coordErr, issueId }, "Phase 19: coordinator onWorkerComplete failed (non-fatal)");
+        }
+      }
     } catch (err) {
       const message = redactCurrentUserText(
         err instanceof Error ? err.message : "Unknown adapter failure",

@@ -430,6 +430,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
   // Phase 15: KAIROS memory digest — injected by dreamTaskService into context
   const kairosMemoryNote = asString(context.paperclipKairosMemory, "").trim();
+  // Phase 19: Coordinator mode prompt overlay — injected by coordinatorService
+  const coordinatorPromptNote = asString(context.paperclipCoordinatorPrompt, "").trim();
   // Phase 9: Layer 1/2 압축 컨텍스트 — dynamic 레이어에 배치하여 캐시 영향 최소화
   const sessionSnipContext = asString(context.paperclipSessionSnipContext, "").trim();
   const sessionCompactDigest = asString(context.paperclipSessionCompactDigest, "").trim();
@@ -450,7 +452,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const prompt = joinLayeredPromptSections({
     static: [renderedBootstrapPrompt],
-    semiStatic: [sessionHandoffNote, kairosMemoryNote || null, renderedPrompt],
+    semiStatic: [sessionHandoffNote, kairosMemoryNote || null, coordinatorPromptNote || null, renderedPrompt],
     dynamic: [compressionNote, dynamicContextNote],
   });
   const promptMetrics = {
@@ -458,6 +460,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
     kairosMemoryChars: kairosMemoryNote.length,
+    coordinatorPromptChars: coordinatorPromptNote.length,
     heartbeatPromptChars: renderedPrompt.length,
     compressionNoteChars: compressionNote?.length ?? 0,
   };
