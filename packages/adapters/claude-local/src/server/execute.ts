@@ -22,6 +22,8 @@ import {
   resolveCommandForLogs,
   renderTemplate,
   runChildProcess,
+  truncateSkillContent,
+  SKILL_TOKEN_CAP,
 } from "@paperclipai/adapter-utils/server-utils";
 import {
   parseClaudeStreamJson,
@@ -35,9 +37,12 @@ import { resolveClaudeDesiredSkillNames } from "./skills.js";
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 
 /**
- * Create a tmpdir with `.claude/skills/` containing symlinks to skills from
- * the repo's `skills/` directory, so `--add-dir` makes Claude Code discover
- * them as proper registered skills.
+ * Create a tmpdir with `.claude/skills/` containing symlinks (small skills) or
+ * truncated copies (large skills) from the repo's `skills/` directory,
+ * so `--add-dir` makes Claude Code discover them as proper registered skills.
+ *
+ * Phase 6: 대용량 스킬(SKILL_TOKEN_CAP 초과)은 서브디렉토리에 트렁케이션된 SKILL.md를
+ * 작성하여 Claude Code의 컨텍스트 창 사용량을 절감합니다.
  */
 async function buildSkillsDir(config: Record<string, unknown>): Promise<string> {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-skills-"));
@@ -52,10 +57,28 @@ async function buildSkillsDir(config: Record<string, unknown>): Promise<string> 
   );
   for (const entry of availableEntries) {
     if (!desiredNames.has(entry.key)) continue;
-    await fs.symlink(
-      entry.source,
-      path.join(target, entry.runtimeName),
-    );
+
+    // Phase 6: 스킬 SKILL.md 크기를 확인하여 대용량이면 트렁케이션된 복사본 사용
+    const skillMdPath = path.join(entry.source, "SKILL.md");
+    const skillContent = await fs.readFile(skillMdPath, "utf-8").catch(() => null);
+    const isLarge = skillContent !== null && Math.ceil(skillContent.length / 4) > SKILL_TOKEN_CAP;
+
+    if (isLarge && skillContent !== null) {
+      // 서브디렉토리에 트렁케이션된 SKILL.md 작성
+      const skillSubDir = path.join(target, entry.runtimeName);
+      await fs.mkdir(skillSubDir, { recursive: true });
+      await fs.writeFile(
+        path.join(skillSubDir, "SKILL.md"),
+        truncateSkillContent(skillContent, SKILL_TOKEN_CAP),
+        "utf-8",
+      );
+    } else {
+      // 소용량 스킬은 기존과 동일하게 심볼릭 링크
+      await fs.symlink(
+        entry.source,
+        path.join(target, entry.runtimeName),
+      );
+    }
   }
   return tmp;
 }

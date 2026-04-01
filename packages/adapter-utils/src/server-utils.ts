@@ -183,6 +183,33 @@ export function renderTemplate(template: string, data: Record<string, unknown>) 
   return template.replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (_, path) => resolvePathValue(data, path));
 }
 
+/** 스킬 마크다운 트렁케이션 기본 토큰 상한 (5,000 ≈ 20,000자) */
+export const SKILL_TOKEN_CAP = 5_000;
+
+/**
+ * 스킬 마크다운 컨텐츠를 토큰 예산에 맞게 트렁케이션합니다.
+ * 완전한 줄 단위로 잘라 읽기 어색함을 방지하고, 생략 안내를 추가합니다.
+ *
+ * @param content   - 원본 스킬 마크다운
+ * @param maxTokens - 최대 허용 토큰 수 (기본 5,000)
+ * @returns 트렁케이션된 마크다운
+ */
+export function truncateSkillContent(content: string, maxTokens = SKILL_TOKEN_CAP): string {
+  const estimatedTokens = Math.ceil(content.length / 4);
+  if (estimatedTokens <= maxTokens) return content;
+
+  const maxChars = maxTokens * 4;
+  const slice = content.slice(0, maxChars);
+  // 줄 중간에서 잘리지 않도록 마지막 줄바꿈 위치까지만 보존
+  const lastNewline = slice.lastIndexOf("\n");
+  const body = lastNewline > maxChars * 0.8 ? slice.slice(0, lastNewline) : slice;
+  const omitted = content.length - body.length;
+  return (
+    body +
+    `\n\n[스킬 내용 일부 생략 — ${omitted}자 초과 (토큰 예산 ${maxTokens}). 전체 내용은 SKILL.md 파일을 직접 참조하세요]`
+  );
+}
+
 export function joinPromptSections(
   sections: Array<string | null | undefined>,
   separator = "\n\n",
