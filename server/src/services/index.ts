@@ -30,3 +30,5 @@ export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { messageBusService, type SendMessageInput, type BroadcastMessageInput, type GetInboxOptions, type AgentMessage } from "./message-bus.js";
+export { sharedMemoryService, type SetMemoryOptions, type ListMemoryOptions, type SharedMemoryEntry } from "./shared-memory.js";

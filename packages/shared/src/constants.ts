@@ -328,8 +328,42 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  // Phase 18: Message Bus
+  "agent.message.received",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
+
+// ---------------------------------------------------------------------------
+// Phase 18: Agent Message Bus
+// ---------------------------------------------------------------------------
+
+/** Delivery scope of an agent message. */
+export const AGENT_MESSAGE_MODES = ["direct", "broadcast", "team"] as const;
+export type AgentMessageMode = (typeof AGENT_MESSAGE_MODES)[number];
+
+/** Semantic type of message content. */
+export const AGENT_MESSAGE_TYPES = [
+  "task_handoff",
+  "status_update",
+  "request",
+  "response",
+  "notification",
+] as const;
+export type AgentMessageType = (typeof AGENT_MESSAGE_TYPES)[number];
+
+/**
+ * Delivery lifecycle status.
+ * queued → delivered → read | expired
+ */
+export const AGENT_MESSAGE_STATUSES = ["queued", "delivered", "read", "expired"] as const;
+export type AgentMessageStatus = (typeof AGENT_MESSAGE_STATUSES)[number];
+
+/**
+ * Message priority levels (ported from Claude Code messageQueueManager).
+ * 0 = now (urgent), 1 = next (normal), 2 = later (background).
+ */
+export const AGENT_MESSAGE_PRIORITIES = [0, 1, 2] as const;
+export type AgentMessagePriority = (typeof AGENT_MESSAGE_PRIORITIES)[number];
 
 export const PRINCIPAL_TYPES = ["user", "agent"] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];
