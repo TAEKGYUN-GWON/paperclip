@@ -64,6 +64,7 @@ import {
   type CompactionTier,
 } from "@paperclipai/adapter-utils";
 import { computeContextDelta } from "./context-delta.js";
+import { contextCache } from "./context-cache.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -2152,8 +2153,10 @@ export function heartbeatService(db: Db) {
     const taskKey = deriveTaskKeyWithHeartbeatFallback(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);
-    const issueContext = issueId
-      ? await db
+    // Phase 7: 이슈 컨텍스트 — 60초 캐시로 반복 DB 쿼리 절감
+    const issueCacheKey = issueId ? `issue:${issueId}` : null;
+    const issueContextQuery = issueId
+      ? db
           .select({
             id: issues.id,
             identifier: issues.identifier,
@@ -2169,7 +2172,13 @@ export function heartbeatService(db: Db) {
           .from(issues)
           .where(and(eq(issues.id, issueId), eq(issues.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
-      : null;
+      : Promise.resolve(null);
+    type IssueContext = Awaited<typeof issueContextQuery>;
+    const cachedIssueContext = issueCacheKey ? contextCache.get<NonNullable<IssueContext>>(issueCacheKey) : null;
+    const issueContext: IssueContext = cachedIssueContext ?? await issueContextQuery;
+    if (issueContext && issueCacheKey && !cachedIssueContext) {
+      contextCache.set(issueCacheKey, issueContext);
+    }
     const issueAssigneeOverrides =
       issueContext && issueContext.assigneeAgentId === agent.id
         ? parseIssueAssigneeAdapterOverrides(
@@ -2182,16 +2191,22 @@ export function heartbeatService(db: Db) {
       : null;
     const contextProjectId = readNonEmptyString(context.projectId);
     const executionProjectId = issueContext?.projectId ?? contextProjectId;
+    // Phase 7: 프로젝트 실행 워크스페이스 정책 — 60초 캐시
+    const projectCacheKey = executionProjectId ? `project:${executionProjectId}` : null;
     const projectExecutionWorkspacePolicy = executionProjectId
-      ? await db
-          .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
-          .from(projects)
-          .where(and(eq(projects.id, executionProjectId), eq(projects.companyId, agent.companyId)))
-          .then((rows) =>
-            gateProjectExecutionWorkspacePolicy(
-              parseProjectExecutionWorkspacePolicy(rows[0]?.executionWorkspacePolicy),
-              isolatedWorkspacesEnabled,
-            ))
+      ? (contextCache.get<ReturnType<typeof gateProjectExecutionWorkspacePolicy>>(projectCacheKey!) ??
+          await db
+            .select({ executionWorkspacePolicy: projects.executionWorkspacePolicy })
+            .from(projects)
+            .where(and(eq(projects.id, executionProjectId), eq(projects.companyId, agent.companyId)))
+            .then((rows) => {
+              const policy = gateProjectExecutionWorkspacePolicy(
+                parseProjectExecutionWorkspacePolicy(rows[0]?.executionWorkspacePolicy),
+                isolatedWorkspacesEnabled,
+              );
+              if (projectCacheKey) contextCache.set(projectCacheKey, policy);
+              return policy;
+            }))
       : null;
     const taskSession = taskKey
       ? await getTaskSession(agent.companyId, agent.id, agent.adapterType, taskKey)
@@ -2437,6 +2452,8 @@ export function heartbeatService(db: Db) {
       }
       if (Object.keys(nextIssuePatch).length > 0) {
         await issuesSvc.update(issueId, nextIssuePatch);
+        // Phase 7: 이슈 업데이트 후 캐시 무효화
+        contextCache.delete(`issue:${issueId}`);
       }
     }
     if (persistedExecutionWorkspace) {
