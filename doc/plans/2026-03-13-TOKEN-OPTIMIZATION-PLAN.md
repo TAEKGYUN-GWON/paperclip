@@ -303,6 +303,22 @@ Even when reuse is desirable, some sessions become too expensive to keep alive i
 - rotating a session does not cause loss of task continuity
 - successful task completion rate stays flat or improves
 
+### ✅ 구현 완료 (2026-04-01, Claude Code 고도화 — commit `0adf45d0`, `e6e722ab`)
+
+원래 계획 항목 외에 Claude Code 아키텍처 패턴을 분석·적용하여 다음 5개 Phase를 추가 구현:
+
+| Phase | 내용 | 커밋 | 효과 |
+|-------|------|------|------|
+| 멀티티어 세션 컴팩션 | none/micro/auto/collapse 4단계, 어댑터별 컨텍스트 윈도우 크기 적용 | `0adf45d0` | 장기 세션 30-50% |
+| 컨텍스트 스냅샷 델타 | 런 간 contextSnapshot JSON 디프, 미변경 키 전달 생략 | `0adf45d0` | 반복 런 20-40% |
+| 프롬프트 캐시 정렬 | static/semiStatic/dynamic 3계층 분리로 캐시 히트율 극대화 | `0adf45d0` | Claude 비용 최대 90% |
+| 도구 결과 버젯팅 | 단일 8k/집계 40k 토큰 상한, 핸드오프 요약 trunc | `0adf45d0` | 도구 집약적 15-30% |
+| 수확 체감 감지 | 연속 3런 출력 <500토큰 시 maxTurns=3 동적 캡 | `e6e722ab` | 출력 토큰 10-20% |
+
+**변경 파일:** `packages/adapter-utils/src/` (compaction-tiers, prompt-layers, tool-result-budget, server-utils), `server/src/services/heartbeat.ts`, `server/src/services/context-delta.ts`, `packages/adapters/claude-local/src/server/execute.ts`
+
+**테스트:** adapter-utils 24개 + server 5개 통과, typecheck ✅
+
 ## Phase 6: Reduce unnecessary skill surface
 
 ### Changes
