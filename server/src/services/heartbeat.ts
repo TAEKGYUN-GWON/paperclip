@@ -42,6 +42,7 @@ import {
   sanitizeRuntimeServiceBaseEnv,
 } from "./workspace-runtime.js";
 import { issueService } from "./issues.js";
+import { taskGraphService } from "./task-graph.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -3488,6 +3489,18 @@ export function heartbeatService(db: Db) {
         scopeType: budgetBlock.scopeType,
         scopeId: budgetBlock.scopeId,
       });
+    }
+
+    // Phase 12: Task Graph — skip execution if a dependency is not yet done
+    if (issueId) {
+      const taskGraph = taskGraphService(db);
+      const blockResult = await taskGraph.isBlocked(agent.companyId, issueId);
+      if (blockResult.blocked) {
+        await writeSkippedRequest("task_graph.blocked");
+        throw conflict("Issue is blocked by unsatisfied dependencies", {
+          blockerIssueIds: blockResult.blockerIssueIds,
+        });
+      }
     }
 
     if (

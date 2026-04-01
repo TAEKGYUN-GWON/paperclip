@@ -135,6 +135,18 @@ export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution"] as const;
 export type IssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 
+// ---------------------------------------------------------------------------
+// Phase 12: Task Graph — Issue Dependencies
+// ---------------------------------------------------------------------------
+
+/**
+ * Dependency edge kinds between issues.
+ * "blocks"    : dependsOnIssue must reach "done" before the blocked issue can proceed.
+ * "relates_to": informational soft link with no blocking enforcement.
+ */
+export const ISSUE_DEPENDENCY_KINDS = ["blocks", "relates_to"] as const;
+export type IssueDependencyKind = (typeof ISSUE_DEPENDENCY_KINDS)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 

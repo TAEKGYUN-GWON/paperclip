@@ -58,3 +58,4 @@ export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
 export { agentMessages } from "./agent_messages.js";
 export { agentSharedMemory } from "./agent_shared_memory.js";
+export { issueDependencies } from "./issue_dependencies.js";

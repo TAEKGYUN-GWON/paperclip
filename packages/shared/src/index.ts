@@ -84,6 +84,8 @@ export {
   type IssueStatus,
   type IssuePriority,
   type IssueOriginKind,
+  type IssueDependencyKind,
+  ISSUE_DEPENDENCY_KINDS,
   type GoalLevel,
   type GoalStatus,
   type ProjectStatus,

@@ -32,3 +32,4 @@ export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServic
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { messageBusService, type SendMessageInput, type BroadcastMessageInput, type GetInboxOptions, type AgentMessage } from "./message-bus.js";
 export { sharedMemoryService, type SetMemoryOptions, type ListMemoryOptions, type SharedMemoryEntry } from "./shared-memory.js";
+export { taskGraphService, type AddDependencyInput, type RemoveDependencyInput, type IssueDependency, type TaskGraphBlockedResult } from "./task-graph.js";
