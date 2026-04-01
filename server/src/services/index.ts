@@ -35,6 +35,13 @@ export { sharedMemoryService, type SetMemoryOptions, type ListMemoryOptions, typ
 export { taskGraphService, type AddDependencyInput, type RemoveDependencyInput, type IssueDependency, type TaskGraphBlockedResult } from "./task-graph.js";
 export { dreamTaskService, type ConsolidationResult } from "./dream-task.js";
 export {
+  autoClaimService,
+  type AutoClaimPolicy,
+  type ClaimCandidate,
+  type ClaimResult,
+  type AutoClaimServiceType,
+} from "./auto-claim.js";
+export {
   coordinatorService,
   type CoordinatorConfig,
   type DelegationPlan,

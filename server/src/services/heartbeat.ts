@@ -45,6 +45,7 @@ import { issueService } from "./issues.js";
 import { taskGraphService } from "./task-graph.js";
 import { dreamTaskService } from "./dream-task.js";
 import { coordinatorService } from "./coordinator.js";
+import { autoClaimService } from "./auto-claim.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -3192,6 +3193,30 @@ export function heartbeatService(db: Db) {
           logger.warn({ err: coordErr, issueId }, "Phase 19: coordinator onWorkerComplete failed (non-fatal)");
         }
       }
+      // Phase 11: Auto-claim — after a successful run, try to claim the next eligible issue
+      if (outcome === "succeeded") {
+        try {
+          const autoClaim = autoClaimService(db);
+          const claimResult = await autoClaim.tryAutoClaim(agent.companyId, agent.id);
+          if (claimResult.claimed && claimResult.issueId) {
+            logger.info(
+              { agentId: agent.id, claimedIssueId: claimResult.issueId },
+              "Phase 11: auto-claim — enqueuing wakeup for claimed issue",
+            );
+            await enqueueWakeup(agent.id, {
+              source: "automation",
+              triggerDetail: "system",
+              reason: "auto_claim",
+              payload: { issueId: claimResult.issueId },
+              contextSnapshot: { issueId: claimResult.issueId, wakeReason: "auto_claim" },
+              requestedByActorType: "system",
+              requestedByActorId: "auto_claim",
+            });
+          }
+        } catch (claimErr) {
+          logger.warn({ err: claimErr }, "Phase 11: auto-claim post-run failed (non-fatal)");
+        }
+      }
     } catch (err) {
       const message = redactCurrentUserText(
         err instanceof Error ? err.message : "Unknown adapter failure",
@@ -3568,6 +3593,34 @@ export function heartbeatService(db: Db) {
         await dreamTask.consolidate(agent.companyId, agentId);
         await writeSkippedRequest("kairos.consolidated");
         return null;
+      }
+    }
+
+    // Phase 11: Auto-claim — idle timer wake with no issue: try to claim one
+    if (source === "timer" && !issueId) {
+      try {
+        const autoClaim = autoClaimService(db);
+        const claimResult = await autoClaim.tryAutoClaim(agent.companyId, agentId);
+        if (claimResult.claimed && claimResult.issueId) {
+          logger.info(
+            { agentId, claimedIssueId: claimResult.issueId },
+            "Phase 11: auto-claim — claimed issue on idle timer wake, re-enqueuing with issue context",
+          );
+          // Re-enqueue with the claimed issue so the run has proper context
+          await enqueueWakeup(agentId, {
+            source: "automation",
+            triggerDetail: "system",
+            reason: "auto_claim",
+            payload: { issueId: claimResult.issueId },
+            contextSnapshot: { issueId: claimResult.issueId, wakeReason: "auto_claim" },
+            requestedByActorType: "system",
+            requestedByActorId: "auto_claim",
+          });
+          await writeSkippedRequest("auto_claim.re_enqueued");
+          return null;
+        }
+      } catch (claimErr) {
+        logger.warn({ err: claimErr }, "Phase 11: auto-claim idle timer failed (non-fatal)");
       }
     }
 

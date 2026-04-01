@@ -148,6 +148,17 @@ export const ISSUE_DEPENDENCY_KINDS = ["blocks", "relates_to"] as const;
 export type IssueDependencyKind = (typeof ISSUE_DEPENDENCY_KINDS)[number];
 
 // ---------------------------------------------------------------------------
+// Phase 11: Auto-claim
+// ---------------------------------------------------------------------------
+
+export const AUTO_CLAIM_PRIORITY_ORDERS = [
+  "priority_first",
+  "created_first",
+  "dependency_first",
+] as const;
+export type AutoClaimPriorityOrder = (typeof AUTO_CLAIM_PRIORITY_ORDERS)[number];
+
+// ---------------------------------------------------------------------------
 // Phase 19: Coordinator Mode
 // ---------------------------------------------------------------------------
 

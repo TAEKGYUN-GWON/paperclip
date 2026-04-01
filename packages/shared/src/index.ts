@@ -86,6 +86,8 @@ export {
   type IssueOriginKind,
   type IssueDependencyKind,
   ISSUE_DEPENDENCY_KINDS,
+  AUTO_CLAIM_PRIORITY_ORDERS,
+  type AutoClaimPriorityOrder,
   COORDINATOR_SESSION_STATUSES,
   WORKER_TASK_STATUSES,
   DELEGATION_STRATEGIES,
