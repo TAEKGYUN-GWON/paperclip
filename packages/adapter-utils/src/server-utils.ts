@@ -206,7 +206,7 @@ export function truncateSkillContent(content: string, maxTokens = SKILL_TOKEN_CA
   const omitted = content.length - body.length;
   return (
     body +
-    `\n\n[스킬 내용 일부 생략 — ${omitted}자 초과 (토큰 예산 ${maxTokens}). 전체 내용은 SKILL.md 파일을 직접 참조하세요]`
+    `\n\n[skill content partially truncated — ${omitted} chars over budget (token limit ${maxTokens}). See SKILL.md for full content]`
   );
 }
 

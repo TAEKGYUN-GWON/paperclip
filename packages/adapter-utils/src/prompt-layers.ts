@@ -83,7 +83,7 @@ export function joinPromptSectionsWithDelta(
       const text = typeof content === "string" ? content.trim() : "";
       if (!text) return "";
       if (unchangedKeys.has(key)) {
-        return `[${key}: 이전 런과 동일 — 생략됨]`;
+        return `[${key}: unchanged from previous run — omitted]`;
       }
       return text;
     })

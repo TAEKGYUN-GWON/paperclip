@@ -304,9 +304,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  // Phase 9: Layer 1/2 압축 컨텍스트
+  const compressionNote = (
+    asString(context.paperclipSessionCompactDigest, "").trim() ||
+    asString(context.paperclipSessionSnipContext, "").trim() ||
+    ""
+  );
   const userPrompt = joinPromptSections([
     renderedBootstrapPrompt,
     sessionHandoffNote,
+    compressionNote,
     renderedHeartbeatPrompt,
   ]);
   const promptMetrics = {
@@ -314,6 +321,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     promptChars: userPrompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
+    compressionNoteChars: compressionNote.length,
     heartbeatPromptChars: renderedHeartbeatPrompt.length,
   };
 

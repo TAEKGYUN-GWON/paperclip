@@ -66,6 +66,7 @@ import {
 import { computeContextDelta } from "./context-delta.js";
 import { contextCache } from "./context-cache.js";
 import { hookRegistry } from "./hook-registry.js";
+import { buildSnipContext, buildCompactDigest } from "./context-compressor.js";
 import { isRetryableResult, getBackoffMs, sleep, MAX_RETRY_ATTEMPTS } from "./retry-policy.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -323,6 +324,10 @@ type SessionCompactionDecision = {
   compactionTier?: CompactionTier;
   /** 수확 체감 감지 여부 (Phase 5): 최근 N개 런 출력 토큰이 모두 임계값 미만 */
   diminishingReturns?: boolean;
+  /** Phase 9 Layer 1: micro 티어 스냅 컨텍스트 */
+  snipContext?: string;
+  /** Phase 9 Layer 2: auto 티어 컴팩트 다이제스트 */
+  compactDigest?: string;
 };
 
 interface ParsedIssueAssigneeAdapterOverrides {
@@ -1078,7 +1083,7 @@ export function heartbeatService(db: Db) {
     if (diminishingReturns) {
       logger.info(
         { agentId: agent.id, threshold: DIMINISHING_RETURNS_THRESHOLD, checks: DIMINISHING_RETURNS_CHECKS },
-        "수확 체감 감지: 최근 런들의 출력 토큰이 임계값 미만",
+        "diminishing returns detected: recent run output tokens below threshold",
       );
     }
 
@@ -1111,7 +1116,7 @@ export function heartbeatService(db: Db) {
     const cumulativeInputTokens = latestRawUsage?.inputTokens ?? 0;
     const tierDecision = selectCompactionTier(cumulativeInputTokens, contextWindowTokens);
     if (tierDecision.tier !== "none") {
-      logger.info({ tier: tierDecision.tier, utilizationPercent: tierDecision.utilizationPercent, agentId: agent.id }, "멀티티어 컴팩션 결정");
+      logger.info({ tier: tierDecision.tier, utilizationPercent: tierDecision.utilizationPercent, agentId: agent.id }, "multi-tier compaction decision");
     }
 
     let reason: string | null = null;
@@ -1127,9 +1132,38 @@ export function heartbeatService(db: Db) {
         `(threshold ${formatCount(policy.maxRawInputTokens)})`;
     } else if (policy.maxSessionAgeHours > 0 && sessionAgeHours >= policy.maxSessionAgeHours) {
       reason = `session age reached ${Math.floor(sessionAgeHours)} hours`;
-    } else if (tierDecision.tier === "auto" || tierDecision.tier === "collapse") {
-      // 임계값 기반 회전이 없더라도 컨텍스트 소진 시 회전
+    } else if (tierDecision.tier === "collapse") {
+      // Phase 9: collapse(95%+)에서만 컨텍스트 소진 회전 — auto는 Layer 2 compact으로 처리
       reason = tierDecision.reason;
+    }
+
+    // Phase 9: Layer 1 (snip) — micro 티어, 최근 런 요약 주입, 세션 유지
+    if (!reason && tierDecision.tier === "micro") {
+      const snipContext = buildSnipContext(runs, tierDecision) || undefined;
+      return {
+        rotate: false,
+        reason: null,
+        handoffMarkdown: null,
+        previousRunId: latestRun?.id ?? null,
+        compactionTier: "micro",
+        snipContext,
+        diminishingReturns,
+      };
+    }
+
+    // Phase 9: Layer 2 (compact) — auto 티어, 구조화된 다이제스트 주입, 세션 유지
+    // 기존: auto에서 즉시 세션 회전 → 변경: compact 다이제스트 생성 후 세션 유지
+    if (!reason && tierDecision.tier === "auto") {
+      const compactDigest = buildCompactDigest(runs, sessionId, issueId, tierDecision);
+      return {
+        rotate: false,
+        reason: null,
+        handoffMarkdown: null,
+        previousRunId: latestRun?.id ?? null,
+        compactionTier: "auto",
+        compactDigest,
+        diminishingReturns,
+      };
     }
 
     if (!reason || !latestRun) {
@@ -2599,6 +2633,18 @@ export function heartbeatService(db: Db) {
       delete context.paperclipPreviousSessionId;
     }
 
+    // Phase 9: Layer 1/2 압축 컨텍스트 주입
+    if (sessionCompaction.snipContext) {
+      context.paperclipSessionSnipContext = sessionCompaction.snipContext;
+    } else {
+      delete context.paperclipSessionSnipContext;
+    }
+    if (sessionCompaction.compactDigest) {
+      context.paperclipSessionCompactDigest = sessionCompaction.compactDigest;
+    } else {
+      delete context.paperclipSessionCompactDigest;
+    }
+
     // Phase 2: 컨텍스트 스냅샷 델타 계산
     // 세션이 회전하지 않고 이전 런이 존재할 때만 델타를 계산합니다.
     if (!sessionCompaction.rotate && sessionCompaction.previousRunId) {
@@ -2636,7 +2682,7 @@ export function heartbeatService(db: Db) {
         : DIMINISHING_RETURNS_MAX_TURNS_CAP;
       logger.info(
         { agentId: agent.id, originalMaxTurns: currentMaxTurns, cappedMaxTurns },
-        "수확 체감: maxTurnsPerRun 동적 축소",
+        "diminishing returns: capping maxTurnsPerRun dynamically",
       );
       return { ...runtimeConfig, maxTurnsPerRun: cappedMaxTurns };
     })();
@@ -2847,7 +2893,7 @@ export function heartbeatService(db: Db) {
         const backoffMs = getBackoffMs(retryCount);
         await onLog(
           "stderr",
-          `[paperclip] API 일시 장애 감지 (${adapterResult.errorMessage ?? "unknown"}). ${Math.round(backoffMs / 1000)}초 후 재시도... (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})\n`,
+          `[paperclip] transient API error (${adapterResult.errorMessage ?? "unknown"}). Retrying in ${Math.round(backoffMs / 1000)}s... (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})\n`,
         );
         await sleep(backoffMs);
         retryCount++;
@@ -2868,7 +2914,7 @@ export function heartbeatService(db: Db) {
       if (retryCount > 0) {
         logger.info(
           { runId: run.id, agentId: agent.id, retryCount, finalOutcome: adapterResult.errorMessage ?? "ok" },
-          "Phase 10: 재시도 완료",
+          "Phase 10: retry succeeded",
         );
       }
       // Phase 8: post:adapter 훅

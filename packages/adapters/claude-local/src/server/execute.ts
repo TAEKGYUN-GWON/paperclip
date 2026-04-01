@@ -428,11 +428,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  // Phase 9: Layer 1/2 압축 컨텍스트 — dynamic 레이어에 배치하여 캐시 영향 최소화
+  const sessionSnipContext = asString(context.paperclipSessionSnipContext, "").trim();
+  const sessionCompactDigest = asString(context.paperclipSessionCompactDigest, "").trim();
 
   // Phase 3: 3계층 프롬프트 — 정적 프리픽스의 바이트 동일성으로 Claude 캐시 히트 극대화
   //   static    : 에이전트 정체성 (신선 세션만 포함 — 동일 에이전트 런 간 변하지 않음)
   //   semiStatic: 세션 핸드오프 + 메인 프롬프트 (태스크 변경 시만 바뀜)
-  //   dynamic   : 델타 컨텍스트 요약 (매 런 고유 정보)
+  //   dynamic   : 델타 컨텍스트 요약 + Phase 9 압축 컨텍스트 (매 런 고유 정보)
   const unchangedContextCount = Array.isArray(context.unchangedContextKeys)
     ? (context.unchangedContextKeys as string[]).length
     : 0;
@@ -440,17 +443,20 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     unchangedContextCount > 0
       ? `[Context: ${unchangedContextCount} keys unchanged from previous run]`
       : null;
+  // compact digest가 snip보다 풍부하므로 우선 사용
+  const compressionNote = sessionCompactDigest || sessionSnipContext || null;
 
   const prompt = joinLayeredPromptSections({
     static: [renderedBootstrapPrompt],
     semiStatic: [sessionHandoffNote, renderedPrompt],
-    dynamic: [dynamicContextNote],
+    dynamic: [compressionNote, dynamicContextNote],
   });
   const promptMetrics = {
     promptChars: prompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
     heartbeatPromptChars: renderedPrompt.length,
+    compressionNoteChars: compressionNote?.length ?? 0,
   };
 
   const buildClaudeArgs = (resumeSessionId: string | null) => {
