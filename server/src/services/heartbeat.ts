@@ -65,6 +65,8 @@ import {
 } from "@paperclipai/adapter-utils";
 import { computeContextDelta } from "./context-delta.js";
 import { contextCache } from "./context-cache.js";
+import { hookRegistry } from "./hook-registry.js";
+import { isRetryableResult, getBackoffMs, sleep, MAX_RETRY_ATTEMPTS } from "./retry-policy.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -2129,9 +2131,35 @@ export function heartbeatService(db: Db) {
       run = claimed;
     }
 
+    // Phase 8: pre:run 훅
+    const preRunResult = await hookRegistry.emit("pre:run", {
+      runId: run.id,
+      agentId: run.agentId,
+      companyId: run.companyId,
+      contextSnapshot: parseObject(run.contextSnapshot),
+    }, logger);
+    if (preRunResult.abort) {
+      await setRunStatus(runId, "failed", {
+        error: preRunResult.abortReason ?? "Blocked by pre:run hook",
+        errorCode: "hook_aborted",
+        finishedAt: new Date(),
+      });
+      await setWakeupStatus(run.wakeupRequestId, "failed", {
+        finishedAt: new Date(),
+        error: preRunResult.abortReason ?? "Blocked by pre:run hook",
+      });
+      return;
+    }
+
     activeRunExecutions.add(run.id);
 
     try {
+    // Phase 8: pre:context 훅
+    await hookRegistry.emit("pre:context", {
+      runId: run.id,
+      agentId: run.agentId,
+      companyId: run.companyId,
+    }, logger);
     const agent = await getAgent(run.agentId);
     if (!agent) {
       await setRunStatus(runId, "failed", {
@@ -2522,6 +2550,13 @@ export function heartbeatService(db: Db) {
       context.projectId = executionWorkspace.projectId;
     }
     const runtimeSessionFallback = taskKey || resetTaskSession ? null : runtime.sessionId;
+    // Phase 8: post:context 훅
+    await hookRegistry.emit("post:context", {
+      runId: run.id,
+      agentId: agent.id,
+      companyId: agent.companyId,
+      contextSnapshot: { ...context },
+    }, logger);
     let previousSessionDisplayId = truncateDisplayId(
       explicitResumeSessionDisplayId ??
         taskSessionForRun?.sessionDisplayId ??
@@ -2550,6 +2585,14 @@ export function heartbeatService(db: Db) {
           `Starting a fresh session because ${sessionCompaction.reason}.`,
         );
       }
+      // Phase 8: on:session-rotate 훅
+      void hookRegistry.emit("on:session-rotate", {
+        runId: run.id,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        reason: sessionCompaction.reason ?? null,
+        previousSessionId: previousSessionDisplayId ?? runtimeSessionIdForAdapter ?? null,
+      }, logger);
     } else {
       delete context.paperclipSessionHandoffMarkdown;
       delete context.paperclipSessionRotationReason;
@@ -2775,7 +2818,16 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
-      const adapterResult = await adapter.execute({
+      // Phase 8: pre:adapter 훅
+      await hookRegistry.emit("pre:adapter", {
+        runId: run.id,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        adapterType: agent.adapterType,
+        attempt: 0,
+      }, logger);
+      // Phase 10: 재시도/백오프 — API 일시 장애 시 자동 재시도
+      let adapterResult = await adapter.execute({
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
@@ -2788,6 +2840,48 @@ export function heartbeatService(db: Db) {
         },
         authToken: authToken ?? undefined,
       });
+      let retryCount = 0;
+      while (isRetryableResult(adapterResult) && retryCount < MAX_RETRY_ATTEMPTS) {
+        const latestRunCheck = await getRun(run.id);
+        if (latestRunCheck?.status === "cancelled") break;
+        const backoffMs = getBackoffMs(retryCount);
+        await onLog(
+          "stderr",
+          `[paperclip] API 일시 장애 감지 (${adapterResult.errorMessage ?? "unknown"}). ${Math.round(backoffMs / 1000)}초 후 재시도... (${retryCount + 1}/${MAX_RETRY_ATTEMPTS})\n`,
+        );
+        await sleep(backoffMs);
+        retryCount++;
+        adapterResult = await adapter.execute({
+          runId: run.id,
+          agent,
+          runtime: runtimeForAdapter,
+          config: effectiveConfig,
+          context,
+          onLog,
+          onMeta: onAdapterMeta,
+          onSpawn: async (meta) => {
+            await persistRunProcessMetadata(run.id, meta);
+          },
+          authToken: authToken ?? undefined,
+        });
+      }
+      if (retryCount > 0) {
+        logger.info(
+          { runId: run.id, agentId: agent.id, retryCount, finalOutcome: adapterResult.errorMessage ?? "ok" },
+          "Phase 10: 재시도 완료",
+        );
+      }
+      // Phase 8: post:adapter 훅
+      await hookRegistry.emit("post:adapter", {
+        runId: run.id,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        adapterType: agent.adapterType,
+        exitCode: adapterResult.exitCode ?? null,
+        errorMessage: adapterResult.errorMessage ?? null,
+        errorCode: adapterResult.errorCode ?? null,
+        attempt: 0,
+      }, logger);
       const adapterManagedRuntimeServices = adapterResult.runtimeServices
         ? await persistAdapterManagedRuntimeServices({
             db,
@@ -2978,6 +3072,15 @@ export function heartbeatService(db: Db) {
         }
       }
       await finalizeAgentStatus(agent.id, outcome);
+      // Phase 8: post:run 훅
+      void hookRegistry.emit("post:run", {
+        runId: run.id,
+        agentId: agent.id,
+        companyId: agent.companyId,
+        outcome,
+        durationMs: run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
+        retryCount: 0,
+      }, logger);
     } catch (err) {
       const message = redactCurrentUserText(
         err instanceof Error ? err.message : "Unknown adapter failure",
