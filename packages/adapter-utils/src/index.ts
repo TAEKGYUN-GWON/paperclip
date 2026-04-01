@@ -51,7 +51,7 @@ export {
   redactTranscriptEntryPaths,
 } from "./log-redaction.js";
 export { inferOpenAiCompatibleBiller } from "./billing.js";
-export { joinPromptSectionsWithDelta } from "./server-utils.js";
+export { joinPromptSectionsWithDelta } from "./prompt-layers.js";
 export {
   selectCompactionTier,
   getContextWindowTokens,

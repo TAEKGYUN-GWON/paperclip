@@ -17,44 +17,44 @@ function toError(error: unknown, context = "Migration status check failed"): Err
 
 async function main(): Promise<void> {
   const connection = await resolveMigrationConnection();
+  // connection.stop() intentionally omitted: the embedded postgres instance is
+  // left running so that the dev server can adopt it via postmaster.pid,
+  // avoiding a shared-memory race between migration-status and server startup.
+  const state = await inspectMigrations(connection.connectionString);
+  const payload =
+    state.status === "upToDate"
+      ? {
+          source: connection.source,
+          status: "upToDate" as const,
+          tableCount: state.tableCount,
+          pendingMigrations: [] as string[],
+        }
+      : {
+          source: connection.source,
+          status: "needsMigrations" as const,
+          tableCount: state.tableCount,
+          pendingMigrations: state.pendingMigrations,
+          reason: state.reason,
+        };
 
-  try {
-    const state = await inspectMigrations(connection.connectionString);
-    const payload =
-      state.status === "upToDate"
-        ? {
-            source: connection.source,
-            status: "upToDate" as const,
-            tableCount: state.tableCount,
-            pendingMigrations: [] as string[],
-          }
-        : {
-            source: connection.source,
-            status: "needsMigrations" as const,
-            tableCount: state.tableCount,
-            pendingMigrations: state.pendingMigrations,
-            reason: state.reason,
-          };
-
-    if (jsonMode) {
-      console.log(JSON.stringify(payload));
-      return;
-    }
-
-    if (payload.status === "upToDate") {
-      console.log(`Database is up to date via ${payload.source}`);
-      return;
-    }
-
-    console.log(
-      `Pending migrations via ${payload.source}: ${payload.pendingMigrations.join(", ")}`,
-    );
-  } finally {
-    await connection.stop();
+  if (jsonMode) {
+    console.log(JSON.stringify(payload));
+    return;
   }
+
+  if (payload.status === "upToDate") {
+    console.log(`Database is up to date via ${payload.source}`);
+    return;
+  }
+
+  console.log(
+    `Pending migrations via ${payload.source}: ${payload.pendingMigrations.join(", ")}`,
+  );
 }
 
-main().catch((error) => {
+main().then(() => {
+  process.exit(0);
+}).catch((error) => {
   const err = toError(error, "Migration status check failed");
   process.stderr.write(`${err.stack ?? err.message}\n`);
   process.exit(1);

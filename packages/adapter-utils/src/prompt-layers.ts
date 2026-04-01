@@ -64,3 +64,29 @@ export function joinLayeredPromptSections(
 export function deterministicStringify(obj: Record<string, unknown>): string {
   return JSON.stringify(obj, Object.keys(obj).sort());
 }
+
+/**
+ * key/content 섹션 배열을 하나의 문자열로 조합합니다.
+ * unchangedKeys에 포함된 섹션은 "[key: 이전 런과 동일 — 생략됨]" 플레이스홀더로 대체합니다.
+ *
+ * @param sections      - { key, content } 섹션 배열
+ * @param unchangedKeys - 이전 런과 동일한 키 목록
+ * @param separator     - 섹션 구분자 (기본 "\n\n")
+ */
+export function joinPromptSectionsWithDelta(
+  sections: Array<{ key: string; content: string | null | undefined }>,
+  unchangedKeys: Set<string>,
+  separator = "\n\n",
+): string {
+  return sections
+    .map(({ key, content }) => {
+      const text = typeof content === "string" ? content.trim() : "";
+      if (!text) return "";
+      if (unchangedKeys.has(key)) {
+        return `[${key}: 이전 런과 동일 — 생략됨]`;
+      }
+      return text;
+    })
+    .filter(Boolean)
+    .join(separator);
+}
