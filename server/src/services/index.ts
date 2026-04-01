@@ -35,6 +35,11 @@ export { sharedMemoryService, type SetMemoryOptions, type ListMemoryOptions, typ
 export { taskGraphService, type AddDependencyInput, type RemoveDependencyInput, type IssueDependency, type TaskGraphBlockedResult } from "./task-graph.js";
 export { dreamTaskService, type ConsolidationResult } from "./dream-task.js";
 export {
+  worktreeLifecycleService,
+  type WorktreeCleanupPolicy,
+  type WorktreeLifecycleServiceType,
+} from "./worktree-lifecycle.js";
+export {
   autoClaimService,
   type AutoClaimPolicy,
   type ClaimCandidate,

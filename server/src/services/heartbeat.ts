@@ -46,6 +46,7 @@ import { taskGraphService } from "./task-graph.js";
 import { dreamTaskService } from "./dream-task.js";
 import { coordinatorService } from "./coordinator.js";
 import { autoClaimService } from "./auto-claim.js";
+import { worktreeLifecycleService } from "./worktree-lifecycle.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -2372,12 +2373,43 @@ export function heartbeatService(db: Db) {
       repoUrl: resolvedWorkspace.repoUrl,
       repoRef: resolvedWorkspace.repoRef,
     } satisfies ExecutionWorkspaceInput;
-    const reusedExecutionWorkspace = shouldReuseExisting && existingExecutionWorkspace
-      ? buildRealizedExecutionWorkspaceFromPersisted({
-          base: executionWorkspaceBase,
-          workspace: existingExecutionWorkspace,
-        })
-      : null;
+    // Phase 22: Worktree isolation — try to reuse a pooled idle worktree for coordinator workers
+    let worktreePoolWorkspace: Awaited<ReturnType<typeof executionWorkspacesSvc.getById>> = null;
+    if (context.paperclipCoordinatorWorker === true && issueRef?.projectId && issueRef?.id) {
+      try {
+        const worktreeLifecycle = worktreeLifecycleService(db);
+        if (await worktreeLifecycle.isEnabled()) {
+          const reusable = await worktreeLifecycle.findReusableWorktree(
+            agent.companyId,
+            issueRef.projectId,
+          );
+          if (reusable) {
+            await worktreeLifecycle.activateReusedWorktree(reusable.id, issueRef.id);
+            worktreePoolWorkspace = await executionWorkspacesSvc.getById(reusable.id);
+            logger.info(
+              { agentId: agent.id, issueId, worktreeWorkspaceId: reusable.id },
+              "Phase 22: reusing pooled worktree for coordinator worker",
+            );
+          }
+        }
+      } catch (worktreeErr) {
+        logger.warn({ err: worktreeErr, issueId }, "Phase 22: worktree pool reuse failed (non-fatal)");
+        worktreePoolWorkspace = null;
+      }
+    }
+    const reusedExecutionWorkspace =
+      (worktreePoolWorkspace
+        ? buildRealizedExecutionWorkspaceFromPersisted({
+            base: executionWorkspaceBase,
+            workspace: worktreePoolWorkspace,
+          })
+        : null)
+      ?? (shouldReuseExisting && existingExecutionWorkspace
+        ? buildRealizedExecutionWorkspaceFromPersisted({
+            base: executionWorkspaceBase,
+            workspace: existingExecutionWorkspace,
+          })
+        : null);
     const executionWorkspace = reusedExecutionWorkspace ?? await realizeExecutionWorkspace({
           base: executionWorkspaceBase,
           config: runtimeConfig,
@@ -2403,7 +2435,11 @@ export function heartbeatService(db: Db) {
         ? mergeExecutionWorkspaceConfig(nextExecutionWorkspaceMetadataBase, configSnapshot)
         : nextExecutionWorkspaceMetadataBase;
     try {
-      persistedExecutionWorkspace = shouldReuseExisting && existingExecutionWorkspace
+      persistedExecutionWorkspace = worktreePoolWorkspace
+        // Phase 22: Pool-reused worktree — activateReusedWorktree already updated the DB record.
+        // Use the already-fetched workspace object directly.
+        ? worktreePoolWorkspace
+        : shouldReuseExisting && existingExecutionWorkspace
         ? await executionWorkspacesSvc.update(existingExecutionWorkspace.id, {
             cwd: executionWorkspace.cwd,
             repoUrl: executionWorkspace.repoUrl,
@@ -3191,6 +3227,27 @@ export function heartbeatService(db: Db) {
           await coordinator.onWorkerComplete(agent.companyId, issueId, mappedOutcome);
         } catch (coordErr) {
           logger.warn({ err: coordErr, issueId }, "Phase 19: coordinator onWorkerComplete failed (non-fatal)");
+        }
+      }
+      // Phase 22: Worktree isolation — release worker worktree or schedule cleanup
+      if (persistedExecutionWorkspace?.id && context.paperclipCoordinatorWorker === true) {
+        try {
+          const worktreeLifecycle = worktreeLifecycleService(db);
+          if (await worktreeLifecycle.isEnabled()) {
+            if (outcome === "succeeded" && issueId) {
+              // Issue is done — schedule cleanup after TTL, not immediate reuse
+              await worktreeLifecycle.markForCleanup(
+                agent.companyId,
+                issueId,
+                "issue_completed",
+              );
+            } else {
+              // Failed or issue not done — release back to pool for reuse
+              await worktreeLifecycle.release(persistedExecutionWorkspace.id);
+            }
+          }
+        } catch (worktreeErr) {
+          logger.warn({ err: worktreeErr, issueId }, "Phase 22: worktree release/cleanup failed (non-fatal)");
         }
       }
       // Phase 11: Auto-claim — after a successful run, try to claim the next eligible issue
