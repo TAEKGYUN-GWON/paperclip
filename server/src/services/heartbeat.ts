@@ -68,6 +68,10 @@ import { computeContextDelta } from "./context-delta.js";
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_MAX = 10;
+// Phase 5: 수확 체감 감지 상수
+const DIMINISHING_RETURNS_THRESHOLD = 500; // 출력 토큰 임계값
+const DIMINISHING_RETURNS_CHECKS = 3; // 연속 체크 런 수
+const DIMINISHING_RETURNS_MAX_TURNS_CAP = 3; // 감지 시 maxTurns 상한
 const DEFERRED_WAKE_CONTEXT_KEY = "_paperclipWakeContext";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
 const startLocksByAgent = new Map<string, Promise<void>>();
@@ -314,6 +318,8 @@ type SessionCompactionDecision = {
   previousRunId: string | null;
   /** 멀티티어 컴팩션 결정 티어 (Phase 1) */
   compactionTier?: CompactionTier;
+  /** 수확 체감 감지 여부 (Phase 5): 최근 N개 런 출력 토큰이 모두 임계값 미만 */
+  diminishingReturns?: boolean;
 };
 
 interface ParsedIssueAssigneeAdapterOverrides {
@@ -1021,16 +1027,21 @@ export function heartbeatService(db: Db) {
     }
 
     const policy = parseSessionCompactionPolicy(agent);
-    if (!policy.enabled || !hasSessionCompactionThresholds(policy)) {
+    if (!policy.enabled) {
       return {
         rotate: false,
         reason: null,
         handoffMarkdown: null,
         previousRunId: null,
+        diminishingReturns: false,
       };
     }
 
-    const fetchLimit = Math.max(policy.maxSessionRuns > 0 ? policy.maxSessionRuns + 1 : 0, 4);
+    // 임계값 기반 회전이 없더라도 수확 체감 감지를 위해 최소한 DIMINISHING_RETURNS_CHECKS만큼 조회
+    const fetchLimit = Math.max(
+      policy.maxSessionRuns > 0 ? policy.maxSessionRuns + 1 : 0,
+      DIMINISHING_RETURNS_CHECKS + 1,
+    );
     const runs = await db
       .select({
         id: heartbeatRuns.id,
@@ -1050,6 +1061,31 @@ export function heartbeatService(db: Db) {
         reason: null,
         handoffMarkdown: null,
         previousRunId: null,
+        diminishingReturns: false,
+      };
+    }
+
+    // Phase 5: 수확 체감 감지 — 최근 N개 런 출력 토큰이 모두 임계값 미만이면 플래그
+    const diminishingReturns =
+      runs.length >= DIMINISHING_RETURNS_CHECKS &&
+      runs.slice(0, DIMINISHING_RETURNS_CHECKS).every((r) => {
+        const usage = readRawUsageTotals(r.usageJson);
+        return (usage?.outputTokens ?? 0) < DIMINISHING_RETURNS_THRESHOLD;
+      });
+    if (diminishingReturns) {
+      logger.info(
+        { agentId: agent.id, threshold: DIMINISHING_RETURNS_THRESHOLD, checks: DIMINISHING_RETURNS_CHECKS },
+        "수확 체감 감지: 최근 런들의 출력 토큰이 임계값 미만",
+      );
+    }
+
+    if (!hasSessionCompactionThresholds(policy)) {
+      return {
+        rotate: false,
+        reason: null,
+        handoffMarkdown: null,
+        previousRunId: runs[0]?.id ?? null,
+        diminishingReturns,
       };
     }
 
@@ -1100,6 +1136,7 @@ export function heartbeatService(db: Db) {
         handoffMarkdown: null,
         previousRunId: latestRun?.id ?? null,
         compactionTier: tierDecision.tier,
+        diminishingReturns,
       };
     }
 
@@ -1138,6 +1175,7 @@ export function heartbeatService(db: Db) {
       handoffMarkdown,
       previousRunId: latestRun.id,
       compactionTier: tierDecision.tier,
+      diminishingReturns,
     };
   }
 
@@ -2528,6 +2566,21 @@ export function heartbeatService(db: Db) {
       taskKey,
     };
 
+    // Phase 5: 수확 체감 감지 시 maxTurnsPerRun 동적 축소 (Claude, Codex 대상)
+    // 연속 저출력 런은 에이전트가 제자리걸음하고 있음을 의미하므로 턴 수를 줄여 낭비를 방지
+    const effectiveConfig = (() => {
+      if (!sessionCompaction.diminishingReturns) return runtimeConfig;
+      const currentMaxTurns = asNumber((runtimeConfig as Record<string, unknown>).maxTurnsPerRun, 0);
+      const cappedMaxTurns = currentMaxTurns > 0
+        ? Math.min(currentMaxTurns, DIMINISHING_RETURNS_MAX_TURNS_CAP)
+        : DIMINISHING_RETURNS_MAX_TURNS_CAP;
+      logger.info(
+        { agentId: agent.id, originalMaxTurns: currentMaxTurns, cappedMaxTurns },
+        "수확 체감: maxTurnsPerRun 동적 축소",
+      );
+      return { ...runtimeConfig, maxTurnsPerRun: cappedMaxTurns };
+    })();
+
     let seq = 1;
     let handle: RunLogHandle | null = null;
     let stdoutExcerpt = "";
@@ -2709,7 +2762,7 @@ export function heartbeatService(db: Db) {
         runId: run.id,
         agent,
         runtime: runtimeForAdapter,
-        config: runtimeConfig,
+        config: effectiveConfig,
         context,
         onLog,
         onMeta: onAdapterMeta,
