@@ -43,6 +43,7 @@ import {
 } from "./workspace-runtime.js";
 import { issueService } from "./issues.js";
 import { taskGraphService } from "./task-graph.js";
+import { dreamTaskService } from "./dream-task.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
 import {
@@ -2881,6 +2882,14 @@ export function heartbeatService(db: Db) {
           "local agent jwt secret missing or invalid; running without injected PAPERCLIP_API_KEY",
         );
       }
+      // Phase 15: KAIROS — inject memory digest into context for this run
+      {
+        const dreamTask = dreamTaskService(db);
+        const kairosDigest = await dreamTask.getDigest(agent.companyId, agent.id);
+        if (kairosDigest) {
+          context.paperclipKairosMemory = kairosDigest;
+        }
+      }
       // Phase 8: pre:adapter 훅
       await hookRegistry.emit("pre:adapter", {
         runId: run.id,
@@ -3520,6 +3529,19 @@ export function heartbeatService(db: Db) {
     if (source !== "timer" && !policy.wakeOnDemand) {
       await writeSkippedRequest("heartbeat.wakeOnDemand.disabled");
       return null;
+    }
+
+    // Phase 15: KAIROS — idle timer wake triggers background memory consolidation
+    // When the agent has no active issue and wakes on a timer, run the
+    // consolidation pass (pure DB aggregation) and skip the adapter call.
+    if (source === "timer" && !issueId) {
+      const dreamTask = dreamTaskService(db);
+      const doConsolidate = await dreamTask.shouldConsolidate(agent.companyId, agentId);
+      if (doConsolidate) {
+        await dreamTask.consolidate(agent.companyId, agentId);
+        await writeSkippedRequest("kairos.consolidated");
+        return null;
+      }
     }
 
     const bypassIssueExecutionLock =

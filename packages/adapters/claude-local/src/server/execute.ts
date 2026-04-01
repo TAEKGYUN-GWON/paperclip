@@ -428,13 +428,15 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
+  // Phase 15: KAIROS memory digest — injected by dreamTaskService into context
+  const kairosMemoryNote = asString(context.paperclipKairosMemory, "").trim();
   // Phase 9: Layer 1/2 압축 컨텍스트 — dynamic 레이어에 배치하여 캐시 영향 최소화
   const sessionSnipContext = asString(context.paperclipSessionSnipContext, "").trim();
   const sessionCompactDigest = asString(context.paperclipSessionCompactDigest, "").trim();
 
   // Phase 3: 3계층 프롬프트 — 정적 프리픽스의 바이트 동일성으로 Claude 캐시 히트 극대화
   //   static    : 에이전트 정체성 (신선 세션만 포함 — 동일 에이전트 런 간 변하지 않음)
-  //   semiStatic: 세션 핸드오프 + 메인 프롬프트 (태스크 변경 시만 바뀜)
+  //   semiStatic: 세션 핸드오프 + KAIROS 메모리 + 메인 프롬프트
   //   dynamic   : 델타 컨텍스트 요약 + Phase 9 압축 컨텍스트 (매 런 고유 정보)
   const unchangedContextCount = Array.isArray(context.unchangedContextKeys)
     ? (context.unchangedContextKeys as string[]).length
@@ -448,13 +450,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const prompt = joinLayeredPromptSections({
     static: [renderedBootstrapPrompt],
-    semiStatic: [sessionHandoffNote, renderedPrompt],
+    semiStatic: [sessionHandoffNote, kairosMemoryNote || null, renderedPrompt],
     dynamic: [compressionNote, dynamicContextNote],
   });
   const promptMetrics = {
     promptChars: prompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,
     sessionHandoffChars: sessionHandoffNote.length,
+    kairosMemoryChars: kairosMemoryNote.length,
     heartbeatPromptChars: renderedPrompt.length,
     compressionNoteChars: compressionNote?.length ?? 0,
   };
