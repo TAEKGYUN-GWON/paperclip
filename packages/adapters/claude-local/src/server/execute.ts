@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { joinLayeredPromptSections } from "@paperclipai/adapter-utils";
 import type { RunProcessResult } from "@paperclipai/adapter-utils/server-utils";
 import {
   asString,
@@ -404,11 +405,24 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? renderTemplate(bootstrapPromptTemplate, templateData).trim()
       : "";
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-  const prompt = joinPromptSections([
-    renderedBootstrapPrompt,
-    sessionHandoffNote,
-    renderedPrompt,
-  ]);
+
+  // Phase 3: 3계층 프롬프트 — 정적 프리픽스의 바이트 동일성으로 Claude 캐시 히트 극대화
+  //   static    : 에이전트 정체성 (신선 세션만 포함 — 동일 에이전트 런 간 변하지 않음)
+  //   semiStatic: 세션 핸드오프 + 메인 프롬프트 (태스크 변경 시만 바뀜)
+  //   dynamic   : 델타 컨텍스트 요약 (매 런 고유 정보)
+  const unchangedContextCount = Array.isArray(context.unchangedContextKeys)
+    ? (context.unchangedContextKeys as string[]).length
+    : 0;
+  const dynamicContextNote =
+    unchangedContextCount > 0
+      ? `[Context: ${unchangedContextCount} keys unchanged from previous run]`
+      : null;
+
+  const prompt = joinLayeredPromptSections({
+    static: [renderedBootstrapPrompt],
+    semiStatic: [sessionHandoffNote, renderedPrompt],
+    dynamic: [dynamicContextNote],
+  });
   const promptMetrics = {
     promptChars: prompt.length,
     bootstrapPromptChars: renderedBootstrapPrompt.length,

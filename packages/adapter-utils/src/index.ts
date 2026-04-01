@@ -51,3 +51,22 @@ export {
   redactTranscriptEntryPaths,
 } from "./log-redaction.js";
 export { inferOpenAiCompatibleBiller } from "./billing.js";
+export { joinPromptSectionsWithDelta } from "./server-utils.js";
+export {
+  selectCompactionTier,
+  getContextWindowTokens,
+  ADAPTER_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+} from "./compaction-tiers.js";
+export type { CompactionTier, CompactionDecision, CompactionResult } from "./compaction-tiers.js";
+export {
+  joinLayeredPromptSections,
+  deterministicStringify,
+} from "./prompt-layers.js";
+export type { LayeredPromptSections } from "./prompt-layers.js";
+export {
+  truncateToTokenBudget,
+  ToolResultBudgetTracker,
+  DEFAULT_TOOL_RESULT_BUDGET,
+} from "./tool-result-budget.js";
+export type { ToolResultBudget } from "./tool-result-budget.js";

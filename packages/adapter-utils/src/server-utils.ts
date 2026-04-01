@@ -193,6 +193,34 @@ export function joinPromptSections(
     .join(separator);
 }
 
+/**
+ * 델타 컨텍스트를 반영한 프롬프트 섹션 조합
+ *
+ * unchangedKeys에 해당하는 섹션은 전체 내용 대신 한 줄 요약으로 대체하여
+ * 반복 런에서 프롬프트 크기를 절감합니다.
+ *
+ * @param sections      - { key: string; content: string }[] 형태의 섹션 배열
+ * @param unchangedKeys - 이전 런과 동일한 키 목록
+ * @param separator     - 섹션 구분자 (기본 "\n\n")
+ */
+export function joinPromptSectionsWithDelta(
+  sections: Array<{ key: string; content: string | null | undefined }>,
+  unchangedKeys: Set<string>,
+  separator = "\n\n",
+): string {
+  return sections
+    .map(({ key, content }) => {
+      const text = typeof content === "string" ? content.trim() : "";
+      if (!text) return "";
+      if (unchangedKeys.has(key)) {
+        return `[${key}: 이전 런과 동일 — 생략됨]`;
+      }
+      return text;
+    })
+    .filter(Boolean)
+    .join(separator);
+}
+
 export function redactEnvForLogs(env: Record<string, string>): Record<string, string> {
   const redacted: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {

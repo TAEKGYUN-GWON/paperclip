@@ -57,8 +57,13 @@ import { redactCurrentUserText, redactCurrentUserValue } from "../log-redaction.
 import {
   hasSessionCompactionThresholds,
   resolveSessionCompactionPolicy,
+  selectCompactionTier,
+  getContextWindowTokens,
+  truncateToTokenBudget,
   type SessionCompactionPolicy,
+  type CompactionTier,
 } from "@paperclipai/adapter-utils";
+import { computeContextDelta } from "./context-delta.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
 const HEARTBEAT_MAX_CONCURRENT_RUNS_DEFAULT = 1;
@@ -307,6 +312,8 @@ type SessionCompactionDecision = {
   reason: string | null;
   handoffMarkdown: string | null;
   previousRunId: string | null;
+  /** 멀티티어 컴팩션 결정 티어 (Phase 1) */
+  compactionTier?: CompactionTier;
 };
 
 interface ParsedIssueAssigneeAdapterOverrides {
@@ -1060,6 +1067,14 @@ export function heartbeatService(db: Db) {
           )
         : 0;
 
+    // 멀티티어 컴팩션 판단 (Phase 1)
+    const contextWindowTokens = policy.contextWindowTokens ?? getContextWindowTokens(agent.adapterType);
+    const cumulativeInputTokens = latestRawUsage?.inputTokens ?? 0;
+    const tierDecision = selectCompactionTier(cumulativeInputTokens, contextWindowTokens);
+    if (tierDecision.tier !== "none") {
+      logger.info({ tier: tierDecision.tier, utilizationPercent: tierDecision.utilizationPercent, agentId: agent.id }, "멀티티어 컴팩션 결정");
+    }
+
     let reason: string | null = null;
     if (policy.maxSessionRuns > 0 && runs.length > policy.maxSessionRuns) {
       reason = `session exceeded ${policy.maxSessionRuns} runs`;
@@ -1073,6 +1088,9 @@ export function heartbeatService(db: Db) {
         `(threshold ${formatCount(policy.maxRawInputTokens)})`;
     } else if (policy.maxSessionAgeHours > 0 && sessionAgeHours >= policy.maxSessionAgeHours) {
       reason = `session age reached ${Math.floor(sessionAgeHours)} hours`;
+    } else if (tierDecision.tier === "auto" || tierDecision.tier === "collapse") {
+      // 임계값 기반 회전이 없더라도 컨텍스트 소진 시 회전
+      reason = tierDecision.reason;
     }
 
     if (!reason || !latestRun) {
@@ -1081,23 +1099,35 @@ export function heartbeatService(db: Db) {
         reason: null,
         handoffMarkdown: null,
         previousRunId: latestRun?.id ?? null,
+        compactionTier: tierDecision.tier,
       };
     }
 
     const latestSummary = summarizeHeartbeatRunResultJson(latestRun.resultJson);
-    const latestTextSummary =
+    const rawLatestTextSummary =
       readNonEmptyString(latestSummary?.summary) ??
       readNonEmptyString(latestSummary?.result) ??
       readNonEmptyString(latestSummary?.message) ??
       readNonEmptyString(latestRun.error);
+
+    // Phase 4: 도구 결과 버젯팅 — 런 요약이 핸드오프를 압도하지 않도록 제한
+    // collapse 티어에서는 더 엄격하게 (1,000토큰), 일반 회전은 2,000토큰
+    const isCollapse = tierDecision.tier === "collapse";
+    const summaryMaxTokens = isCollapse ? 1_000 : 2_000;
+    const latestTextSummary = rawLatestTextSummary
+      ? truncateToTokenBudget(rawLatestTextSummary, summaryMaxTokens, "tail")
+      : null;
 
     const handoffMarkdown = [
       "Paperclip session handoff:",
       `- Previous session: ${sessionId}`,
       issueId ? `- Issue: ${issueId}` : "",
       `- Rotation reason: ${reason}`,
+      tierDecision.tier !== "none" ? `- Compaction tier: ${tierDecision.tier} (${tierDecision.utilizationPercent}% context used)` : "",
       latestTextSummary ? `- Last run summary: ${latestTextSummary}` : "",
-      "Continue from the current task state. Rebuild only the minimum context you need.",
+      isCollapse
+        ? "Context critically exhausted. Restore ONLY your current objective and immediate next action. Skip all historical context."
+        : "Continue from the current task state. Rebuild only the minimum context you need.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -1107,6 +1137,7 @@ export function heartbeatService(db: Db) {
       reason,
       handoffMarkdown,
       previousRunId: latestRun.id,
+      compactionTier: tierDecision.tier,
     };
   }
 
@@ -2468,6 +2499,26 @@ export function heartbeatService(db: Db) {
       delete context.paperclipSessionHandoffMarkdown;
       delete context.paperclipSessionRotationReason;
       delete context.paperclipPreviousSessionId;
+    }
+
+    // Phase 2: 컨텍스트 스냅샷 델타 계산
+    // 세션이 회전하지 않고 이전 런이 존재할 때만 델타를 계산합니다.
+    if (!sessionCompaction.rotate && sessionCompaction.previousRunId) {
+      const previousRunSnapshot = await db
+        .select({ contextSnapshot: heartbeatRuns.contextSnapshot })
+        .from(heartbeatRuns)
+        .where(eq(heartbeatRuns.id, sessionCompaction.previousRunId))
+        .then((rows) => parseObject(rows[0]?.contextSnapshot ?? null));
+      const hasPreviousSnapshot = Object.keys(previousRunSnapshot).length > 0;
+      const { delta, unchangedKeys } = computeContextDelta(
+        hasPreviousSnapshot ? previousRunSnapshot : null,
+        context,
+      );
+      context.contextDelta = delta;
+      context.unchangedContextKeys = unchangedKeys;
+    } else {
+      delete context.contextDelta;
+      delete context.unchangedContextKeys;
     }
 
     const runtimeForAdapter = {

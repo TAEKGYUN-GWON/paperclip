@@ -3,6 +3,8 @@ export interface SessionCompactionPolicy {
   maxSessionRuns: number;
   maxRawInputTokens: number;
   maxSessionAgeHours: number;
+  /** 어댑터 컨텍스트 윈도우 크기 (토큰). 0이면 티어 컴팩션 비활성 */
+  contextWindowTokens?: number;
 }
 
 export type NativeContextManagement = "confirmed" | "likely" | "unknown" | "none";
@@ -49,12 +51,12 @@ export const ADAPTER_SESSION_MANAGEMENT: Record<string, AdapterSessionManagement
   claude_local: {
     supportsSessionResume: true,
     nativeContextManagement: "confirmed",
-    defaultSessionCompaction: ADAPTER_MANAGED_SESSION_POLICY,
+    defaultSessionCompaction: { ...ADAPTER_MANAGED_SESSION_POLICY, contextWindowTokens: 200_000 },
   },
   codex_local: {
     supportsSessionResume: true,
     nativeContextManagement: "confirmed",
-    defaultSessionCompaction: ADAPTER_MANAGED_SESSION_POLICY,
+    defaultSessionCompaction: { ...ADAPTER_MANAGED_SESSION_POLICY, contextWindowTokens: 200_000 },
   },
   cursor: {
     supportsSessionResume: true,
@@ -64,7 +66,7 @@ export const ADAPTER_SESSION_MANAGEMENT: Record<string, AdapterSessionManagement
   gemini_local: {
     supportsSessionResume: true,
     nativeContextManagement: "unknown",
-    defaultSessionCompaction: DEFAULT_SESSION_COMPACTION_POLICY,
+    defaultSessionCompaction: { ...DEFAULT_SESSION_COMPACTION_POLICY, contextWindowTokens: 1_000_000 },
   },
   opencode_local: {
     supportsSessionResume: true,
