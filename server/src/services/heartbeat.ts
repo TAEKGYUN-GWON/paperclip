@@ -67,6 +67,7 @@ import { computeContextDelta } from "./context-delta.js";
 import { contextCache } from "./context-cache.js";
 import { hookRegistry } from "./hook-registry.js";
 import { buildSnipContext, buildCompactDigest } from "./context-compressor.js";
+import { RunProgressTracker, PROGRESS_LOG_INTERVAL } from "./run-progress-tracker.js";
 import { isRetryableResult, getBackoffMs, sleep, MAX_RETRY_ATTEMPTS } from "./retry-policy.js";
 
 const MAX_LIVE_LOG_CHUNK_BYTES = 8 * 1024;
@@ -2749,6 +2750,15 @@ export function heartbeatService(db: Db) {
         .where(eq(heartbeatRuns.id, runId));
 
       const currentUserRedactionOptions = await getCurrentUserRedactionOptions();
+      // Phase 14: run progress tracker — accumulates metrics for heartbeat.run.progress events
+      const progressTracker = new RunProgressTracker(run.id, run.agentId);
+      const publishProgress = () => {
+        publishLiveEvent({
+          companyId: run.companyId,
+          type: "heartbeat.run.progress",
+          payload: progressTracker.snapshot() as unknown as Record<string, unknown>,
+        });
+      };
       const onLog = async (stream: "stdout" | "stderr", chunk: string) => {
         const sanitizedChunk = redactCurrentUserText(chunk, currentUserRedactionOptions);
         if (stream === "stdout") stdoutExcerpt = appendExcerpt(stdoutExcerpt, sanitizedChunk);
@@ -2780,6 +2790,12 @@ export function heartbeatService(db: Db) {
             truncated: payloadChunk.length !== sanitizedChunk.length,
           },
         });
+
+        // Phase 14: publish progress on tool use detection or every N chunks
+        const toolUseDetected = progressTracker.onLogChunk(stream, sanitizedChunk);
+        if (toolUseDetected || progressTracker.shouldPublishOnInterval()) {
+          publishProgress();
+        }
       };
       for (const warning of runtimeWorkspaceWarnings) {
         const logEntry = formatRuntimeWorkspaceWarningLog(warning);
@@ -2872,6 +2888,9 @@ export function heartbeatService(db: Db) {
         adapterType: agent.adapterType,
         attempt: 0,
       }, logger);
+      // Phase 14: transition to executing phase and publish initial progress
+      progressTracker.setPhase("executing");
+      publishProgress();
       // Phase 10: 재시도/백오프 — API 일시 장애 시 자동 재시도
       let adapterResult = await adapter.execute({
         runId: run.id,
@@ -2917,6 +2936,15 @@ export function heartbeatService(db: Db) {
           "Phase 10: retry succeeded",
         );
       }
+      // Phase 14: transition to finalizing, populate token counts from adapter result
+      progressTracker.setPhase("finalizing");
+      if (adapterResult.usage) {
+        progressTracker.setTokenCounts(
+          adapterResult.usage.inputTokens ?? 0,
+          adapterResult.usage.outputTokens ?? 0,
+        );
+      }
+      publishProgress();
       // Phase 8: post:adapter 훅
       await hookRegistry.emit("post:adapter", {
         runId: run.id,
