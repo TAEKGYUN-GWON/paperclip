@@ -89,3 +89,15 @@ export {
   type McpToolExecutionContext,
   type McpDiscoveryServiceType,
 } from "./mcp-discovery.js";
+export {
+  workflowEngineService,
+  WorkflowValidationError,
+  type WorkflowDefinition,
+  type WorkflowStepDef,
+  type AgentSelector,
+  type StepCondition,
+  type WorkflowExecutionState,
+  type WorkflowExecutionStatus,
+  type StepStatus,
+  type WorkflowEngineServiceType,
+} from "./workflow-engine.js";

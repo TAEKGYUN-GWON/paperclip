@@ -37,6 +37,11 @@ export const routines = pgTable(
     updatedByUserId: text("updated_by_user_id"),
     lastTriggeredAt: timestamp("last_triggered_at", { withTimezone: true }),
     lastEnqueuedAt: timestamp("last_enqueued_at", { withTimezone: true }),
+    /**
+     * Phase 13: Declarative workflow definition (nullable — existing routines unaffected).
+     * When set, this routine executes as a multi-agent DAG workflow.
+     */
+    workflowDefinition: jsonb("workflow_definition").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -98,6 +103,11 @@ export const routineRuns = pgTable(
     coalescedIntoRunId: uuid("coalesced_into_run_id"),
     failureReason: text("failure_reason"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
+    /**
+     * Phase 13: Per-run workflow execution state (nullable).
+     * Shape: { stepStatuses: Record<string, "pending"|"running"|"succeeded"|"failed"|"skipped"> }
+     */
+    workflowExecutionState: jsonb("workflow_execution_state").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
