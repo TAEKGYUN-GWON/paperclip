@@ -70,3 +70,22 @@ export {
   type WorkerPermissionProfile,
   DEFAULT_WORKER_PERMISSION_PROFILE,
 } from "./agent-permissions.js";
+export {
+  mcpSessionService,
+  McpSessionExpiredError,
+  McpConnectionError,
+  type McpToolDefinition,
+  type McpCallToolResult,
+  type McpServerConfig,
+  type McpConnection,
+  type HealthStatus,
+  type McpSessionServiceType,
+} from "./mcp-session.js";
+export {
+  mcpDiscoveryService,
+  type McpServerRecord,
+  type RegisterMcpServerInput,
+  type DiscoveredTool,
+  type McpToolExecutionContext,
+  type McpDiscoveryServiceType,
+} from "./mcp-discovery.js";

@@ -216,6 +216,28 @@ export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[numbe
 export const DELEGATION_SCOPES = ["once", "session", "permanent"] as const;
 export type DelegationScope = (typeof DELEGATION_SCOPES)[number];
 
+// ---------------------------------------------------------------------------
+// Phase 16: MCP Dynamic Tool Registration
+// ---------------------------------------------------------------------------
+
+/**
+ * Connection transport types for MCP servers.
+ * Adapted from Claude Code McpServerConfig union types.
+ */
+export const MCP_TRANSPORT_TYPES = ["http", "sse", "stdio"] as const;
+export type McpTransportType = (typeof MCP_TRANSPORT_TYPES)[number];
+
+/** Lifecycle status of a registered MCP server. */
+export const MCP_SERVER_STATUSES = ["active", "disabled", "error"] as const;
+export type McpServerStatus = (typeof MCP_SERVER_STATUSES)[number];
+
+/**
+ * Visibility scope for MCP server tool availability.
+ * "company" → all agents; "project" → project-scoped; "agent" → single agent.
+ */
+export const MCP_SERVER_SCOPES = ["company", "project", "agent"] as const;
+export type McpServerScope = (typeof MCP_SERVER_SCOPES)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 

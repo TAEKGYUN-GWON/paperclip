@@ -62,3 +62,4 @@ export { issueDependencies } from "./issue_dependencies.js";
 export { coordinatorSessions } from "./coordinator_sessions.js";
 export { workerTasks } from "./worker_tasks.js";
 export { permissionRequests } from "./permission_requests.js";
+export { mcpServers } from "./mcp_servers.js";
