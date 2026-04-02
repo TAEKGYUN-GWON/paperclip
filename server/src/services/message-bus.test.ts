@@ -15,6 +15,8 @@ function makeMessage(overrides: Partial<AgentMessage> = {}): AgentMessage {
     id: "msg-1",
     companyId: "company-1",
     fromAgentId: "agent-a",
+    fromUserId: null,
+    channelId: null,
     toAgentId: "agent-b",
     mode: "direct",
     priority: 1,

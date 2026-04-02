@@ -31,6 +31,8 @@ export function publishLiveEvent(input: {
 }) {
   const event = toLiveEvent(input);
   emitter.emit(input.companyId, event);
+  // CEO Chat BriefingAggregator가 subscribeGlobalLiveEvents()로 전체 이벤트를 구독할 수 있도록
+  emitter.emit("*", event);
   return event;
 }
 

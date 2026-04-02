@@ -661,6 +661,21 @@ function handleLiveEvent(
       gatedPushToast(gate, pushToast, `activity:${action ?? "unknown"}`, toast);
     }
   }
+
+  if (event.type === "ceo.briefing.created") {
+    // CEO 채팅 타임라인 + 미읽음 수 갱신
+    queryClient.invalidateQueries({ queryKey: queryKeys.ceoChat.timeline(expectedCompanyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.ceoChat.unreadCount(expectedCompanyId) });
+  }
+
+  if (event.type === "group.message.created") {
+    const channelId = readString(payload.channelId);
+    if (channelId) {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.groupChat.history(expectedCompanyId, channelId),
+      });
+    }
+  }
 }
 
 function resolveLiveCompanyId(

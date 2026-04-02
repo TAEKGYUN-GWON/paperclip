@@ -17,3 +17,5 @@ export { accessRoutes } from "./access.js";
 export { instanceSettingsRoutes } from "./instance-settings.js";
 export { mcpRoutes } from "./mcp.js";
 export { remotePlanningRoutes } from "./remote-planning.js";
+export { ceoChatRoutes } from "./ceo-chat.js";
+export { groupChatRoutes } from "./group-chat.js";

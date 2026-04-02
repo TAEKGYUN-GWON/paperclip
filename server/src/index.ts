@@ -29,6 +29,7 @@ import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import { heartbeatService, reconcilePersistedRuntimeServicesOnStartup, routineService } from "./services/index.js";
+import { briefingAggregatorService } from "./services/briefing-aggregator.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
@@ -548,6 +549,9 @@ export async function startServer(): Promise<StartedServer> {
     deploymentMode: config.deploymentMode,
     resolveSessionFromHeaders,
   });
+
+  // CEO Chat: 선제적 브리핑 집계 서비스 시작
+  briefingAggregatorService(db as any).start();
 
   void reconcilePersistedRuntimeServicesOnStartup(db as any)
     .then((result) => {

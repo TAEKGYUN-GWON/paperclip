@@ -133,6 +133,15 @@ export const queryKeys = {
   skills: {
     available: ["skills", "available"] as const,
   },
+  ceoChat: {
+    conversation: (companyId: string) => ["ceo-chat", companyId, "conversation"] as const,
+    timeline: (companyId: string) => ["ceo-chat", companyId, "timeline"] as const,
+    unreadCount: (companyId: string) => ["ceo-chat", companyId, "unread-count"] as const,
+  },
+  groupChat: {
+    channels: (companyId: string) => ["group-chat", companyId, "channels"] as const,
+    history: (companyId: string, channelId: string) => ["group-chat", companyId, "history", channelId] as const,
+  },
   plugins: {
     all: ["plugins"] as const,
     examples: ["plugins", "examples"] as const,

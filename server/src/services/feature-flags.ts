@@ -30,7 +30,8 @@ export type FeatureFlagKey =
   | "permission_delegation"   // Phase 21: worker → coordinator → user permission flow
   | "declarative_workflows"   // Phase 13: YAML-defined multi-agent pipelines
   | "mcp_dynamic_tools"       // Phase 16: runtime MCP tool registration
-  | "remote_planning";        // Phase 20: ULTRAPLAN remote planning offload
+  | "remote_planning"         // Phase 20: ULTRAPLAN remote planning offload
+  | "ceo_chat";               // CEO Chat: CEO 1:1 채팅, 선제적 브리핑, 단체 톡방
 
 // Default state for every flag (false = feature is off until explicitly enabled)
 const FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
@@ -46,6 +47,7 @@ const FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
   declarative_workflows: false,
   mcp_dynamic_tools: false,
   remote_planning: false,
+  ceo_chat: false,
 };
 
 // ──────────────────────────────────────────────────────────────────────────────

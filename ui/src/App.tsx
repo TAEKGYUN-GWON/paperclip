@@ -45,6 +45,8 @@ import { InviteLandingPage } from "./pages/InviteLanding";
 import { NotFoundPage } from "./pages/NotFound";
 import { PlanReview } from "./pages/PlanReview";
 import { Plans } from "./pages/Plans";
+import { CeoChat } from "./pages/CeoChat";
+import { GroupChat } from "./pages/GroupChat";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -169,6 +171,9 @@ function boardRoutes() {
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
       <Route path="plans" element={<Plans />} />
       <Route path="plans/:sessionId" element={<PlanReview />} />
+      <Route path="ceo-chat" element={<CeoChat />} />
+      <Route path="group-chat" element={<GroupChat />} />
+      <Route path="group-chat/:channelId" element={<GroupChat />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />
       <Route path="inbox" element={<InboxRootRedirect />} />

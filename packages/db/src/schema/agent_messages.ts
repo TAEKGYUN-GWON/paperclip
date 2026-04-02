@@ -3,6 +3,7 @@ import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import type { AgentMessageMode, AgentMessageType, AgentMessageStatus } from "@paperclipai/shared";
+import { projects } from "./projects.js";
 
 /**
  * agent_messages — Phase 18: Message Bus
@@ -16,9 +17,14 @@ export const agentMessages = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     companyId: uuid("company_id").notNull().references(() => companies.id),
-    fromAgentId: uuid("from_agent_id").notNull().references(() => agents.id),
+    // nullable: 에이전트 발신 또는 사용자 발신 (fromUserId와 상호 배타)
+    fromAgentId: uuid("from_agent_id").references(() => agents.id),
+    // 사용자 발신 시 설정 (fromAgentId와 상호 배타)
+    fromUserId: text("from_user_id"),
     // null = broadcast to all agents in company
     toAgentId: uuid("to_agent_id").references(() => agents.id),
+    // 단체 톡방 채널 ID = projectId (null = direct/broadcast 메시지)
+    channelId: uuid("channel_id").references(() => projects.id, { onDelete: "set null" }),
     mode: text("mode").$type<AgentMessageMode>().notNull().default("direct"),
     // 0 = now (urgent), 1 = next (normal), 2 = later (background)
     priority: integer("priority").notNull().default(1),
@@ -55,5 +61,11 @@ export const agentMessages = pgTable(
     ),
     // For expiry cleanup jobs
     expiresAtIdx: index("agent_messages_expires_at_idx").on(table.expiresAt),
+    // 채널 히스토리 조회: 프로젝트별 단체 톡방 메시지
+    channelIdx: index("agent_messages_channel_idx").on(
+      table.companyId,
+      table.channelId,
+      table.createdAt,
+    ),
   }),
 );

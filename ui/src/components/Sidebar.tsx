@@ -12,6 +12,7 @@ import {
   Repeat,
   Settings,
   ClipboardList,
+  MessageSquare,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -105,6 +106,8 @@ export function Sidebar() {
           <SidebarNavItem to="/routines" label={t("sidebar.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("sidebar.goals")} icon={Target} />
           <SidebarNavItem to="/plans" label={t("sidebar.plans")} icon={ClipboardList} textBadge="Beta" textBadgeTone="amber" />
+          <SidebarNavItem to="/ceo-chat" label={t("sidebar.ceoChat")} icon={MessageSquare} />
+          <SidebarNavItem to="/group-chat" label={t("sidebar.groupChat")} icon={MessageSquare} />
         </SidebarSection>
 
         <SidebarProjects />

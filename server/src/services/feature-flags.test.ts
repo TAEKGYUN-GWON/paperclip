@@ -62,8 +62,8 @@ describe("evaluateAllFlags", () => {
 
   it("returns correct count of known flags", () => {
     const all = evaluateAllFlags(null);
-    // 12 known flags in the registry
-    expect(Object.keys(all)).toHaveLength(12);
+    // 13 known flags in the registry (includes ceo_chat added in Phase CEO Chat)
+    expect(Object.keys(all)).toHaveLength(13);
   });
 });
 

@@ -132,7 +132,7 @@ export const INBOX_MINE_ISSUE_STATUS_FILTER = INBOX_MINE_ISSUE_STATUSES.join(","
 export const ISSUE_PRIORITIES = ["critical", "high", "medium", "low"] as const;
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 
-export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution"] as const;
+export const ISSUE_ORIGIN_KINDS = ["manual", "routine_execution", "conversation"] as const;
 export type IssueOriginKind = (typeof ISSUE_ORIGIN_KINDS)[number];
 
 // ---------------------------------------------------------------------------
@@ -483,6 +483,9 @@ export const LIVE_EVENT_TYPES = [
   "plugin.worker.restarted",
   // Phase 18: Message Bus
   "agent.message.received",
+  // CEO Chat
+  "ceo.briefing.created",
+  "group.message.created",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
@@ -885,3 +888,27 @@ export const PLUGIN_BRIDGE_ERROR_CODES = [
   "UNKNOWN",
 ] as const;
 export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
+
+// ---------------------------------------------------------------------------
+// CEO Chat: 브리핑 타입
+// ---------------------------------------------------------------------------
+
+/** CEO 선제적 브리핑 종류 */
+export const BRIEFING_TYPES = [
+  "run_completed",
+  "run_failed",
+  "issue_created",
+  "issue_assigned",
+  "agent_report",
+  "delegation",
+  "error",
+] as const;
+export type BriefingType = (typeof BRIEFING_TYPES)[number];
+
+/** 브리핑 원본 소스 종류 */
+export const BRIEFING_SOURCE_TYPES = [
+  "heartbeat_run",
+  "activity_log",
+  "agent_message",
+] as const;
+export type BriefingSourceType = (typeof BRIEFING_SOURCE_TYPES)[number];
