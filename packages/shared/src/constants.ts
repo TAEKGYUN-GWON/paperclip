@@ -178,6 +178,44 @@ export type WorkerTaskStatus = (typeof WORKER_TASK_STATUSES)[number];
 export const DELEGATION_STRATEGIES = ["round_robin", "capability_match", "load_balance"] as const;
 export type DelegationStrategy = (typeof DELEGATION_STRATEGIES)[number];
 
+// ---------------------------------------------------------------------------
+// Phase 21: Permission Delegation Protocol
+// ---------------------------------------------------------------------------
+
+/**
+ * Granular permission types a worker agent may need to escalate.
+ * Ported from Claude Code swarm/permissionSync.ts PermissionUpdate types.
+ */
+export const PERMISSION_TYPES = [
+  "bash_execute",    // Shell command execution
+  "file_write",      // File write / create
+  "file_delete",     // File deletion
+  "network_access",  // External network requests
+  "git_push",        // git push
+  "tool_install",    // Package / tool installation
+  "db_write",        // Database write operations
+  "mcp_tool_use",    // MCP tool execution (Phase 16)
+] as const;
+export type PermissionType = (typeof PERMISSION_TYPES)[number];
+
+/** Lifecycle status of a permission escalation request. */
+export const PERMISSION_REQUEST_STATUSES = [
+  "pending",   // Awaiting coordinator / user decision
+  "approved",  // Granted by coordinator or user
+  "rejected",  // Denied by coordinator or user
+  "expired",   // Auto-rejected after TTL
+] as const;
+export type PermissionRequestStatus = (typeof PERMISSION_REQUEST_STATUSES)[number];
+
+/**
+ * How long an approved permission grant lasts.
+ * "once"      — only for this single tool call
+ * "session"   — for the remainder of the coordinator session
+ * "permanent" — written back to agent_permissions permanently
+ */
+export const DELEGATION_SCOPES = ["once", "session", "permanent"] as const;
+export type DelegationScope = (typeof DELEGATION_SCOPES)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 

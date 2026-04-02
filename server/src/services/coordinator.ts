@@ -538,11 +538,15 @@ export function coordinatorService(db: Db) {
   /**
    * 코디네이터 시스템 프롬프트 오버레이를 빌드한다.
    * Heartbeat pre:context에서 호출하여 context.paperclipCoordinatorPrompt에 주입.
+   *
+   * @param pendingPermissionsContext - Phase 21: pending permission escalations from
+   *   permissionDelegationService.buildPendingPermissionsContext(). Pass empty string if none.
    */
   async function buildCoordinatorPrompt(
     companyId: string,
     agentId: string,
     parentIssueId: string,
+    pendingPermissionsContext?: string,
   ): Promise<string | null> {
     const status = await getStatus(companyId, parentIssueId);
     if (!status) return null;
@@ -584,6 +588,11 @@ export function coordinatorService(db: Db) {
           `- ${statusIcon} ${(t.summary ?? "untitled").slice(0, 120)} (worker: ${t.workerAgentId ?? "unassigned"})`,
         );
       }
+    }
+
+    // Phase 21: inject pending permission escalations
+    if (pendingPermissionsContext) {
+      lines.push("", pendingPermissionsContext);
     }
 
     return lines.join("\n");

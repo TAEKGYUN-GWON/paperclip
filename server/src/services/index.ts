@@ -56,3 +56,17 @@ export {
   type WorkerTask,
   type CoordinatorServiceType,
 } from "./coordinator.js";
+export {
+  permissionDelegationService,
+  type PermissionCheckInput,
+  type PermissionCheckResult,
+  type RequestPermissionInput,
+  type PermissionResolution,
+  type PermissionRequest,
+} from "./permission-delegation.js";
+export {
+  resolveWorkerPermissionProfile,
+  toolNameToPermissionType,
+  type WorkerPermissionProfile,
+  DEFAULT_WORKER_PERMISSION_PROFILE,
+} from "./agent-permissions.js";
