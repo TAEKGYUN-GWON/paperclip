@@ -4,6 +4,7 @@ import { patchInstanceExperimentalSettingsSchema, patchInstanceGeneralSettingsSc
 import { forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import { instanceSettingsService, logActivity } from "../services/index.js";
+import { evaluateAllFlags } from "../services/feature-flags.js";
 import { getActorInfo } from "./authz.js";
 
 function assertCanManageInstanceSettings(req: Request) {
@@ -57,7 +58,9 @@ export function instanceSettingsRoutes(db: Db) {
 
   router.get("/instance/settings/experimental", async (req, res) => {
     assertCanManageInstanceSettings(req);
-    res.json(await svc.getExperimental());
+    const experimental = await svc.getExperimental();
+    const mergedFlags = evaluateAllFlags(experimental.featureFlags);
+    res.json({ ...experimental, featureFlags: mergedFlags });
   });
 
   router.patch(
