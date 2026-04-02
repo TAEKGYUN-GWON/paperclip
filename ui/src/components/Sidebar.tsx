@@ -22,6 +22,7 @@ import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { heartbeatsApi } from "../api/heartbeats";
+import { ceoChatApi } from "../api/ceo-chat";
 import { queryKeys } from "../lib/queryKeys";
 import { useInboxBadge } from "../hooks/useInboxBadge";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,13 @@ export function Sidebar() {
     refetchInterval: 10_000,
   });
   const liveRunCount = liveRuns?.length ?? 0;
+  const { data: ceoChatUnread } = useQuery({
+    queryKey: queryKeys.ceoChat.unreadCount(selectedCompanyId!),
+    queryFn: () => ceoChatApi.getUnreadCount(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
+  const ceoChatUnreadCount = ceoChatUnread?.count ?? 0;
 
   function openSearch() {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true }));
@@ -106,7 +114,7 @@ export function Sidebar() {
           <SidebarNavItem to="/routines" label={t("sidebar.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("sidebar.goals")} icon={Target} />
           <SidebarNavItem to="/plans" label={t("sidebar.plans")} icon={ClipboardList} textBadge="Beta" textBadgeTone="amber" />
-          <SidebarNavItem to="/ceo-chat" label={t("sidebar.ceoChat")} icon={MessageSquare} />
+          <SidebarNavItem to="/ceo-chat" label={t("sidebar.ceoChat")} icon={MessageSquare} badge={ceoChatUnreadCount || undefined} />
           <SidebarNavItem to="/group-chat" label={t("sidebar.groupChat")} icon={MessageSquare} />
         </SidebarSection>
 

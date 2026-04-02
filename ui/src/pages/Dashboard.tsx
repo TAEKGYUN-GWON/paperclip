@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import { dashboardApi } from "../api/dashboard";
+import { ceoChatApi, type BriefingTimelineItem } from "../api/ceo-chat";
 import { activityApi } from "../api/activity";
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
@@ -79,6 +80,17 @@ export function Dashboard() {
     queryFn: () => heartbeatsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
+
+  const { data: ceoChatTimeline } = useQuery({
+    queryKey: queryKeys.ceoChat.timeline(selectedCompanyId!),
+    queryFn: () => ceoChatApi.getTimeline(selectedCompanyId!, 5),
+    enabled: !!selectedCompanyId,
+    refetchInterval: 30_000,
+  });
+  const recentBriefings = (ceoChatTimeline?.timeline ?? [])
+    .filter((item): item is BriefingTimelineItem => item.kind === "briefing")
+    .filter((item) => item.readAt === null)
+    .slice(0, 3);
 
   const recentIssues = issues ? getRecentIssues(issues) : [];
   const recentActivity = useMemo(() => (activity ?? []).slice(0, 10), [activity]);
@@ -304,6 +316,31 @@ export function Dashboard() {
             className="grid gap-4 md:grid-cols-2"
             itemClassName="rounded-lg border bg-card p-4 shadow-sm"
           />
+
+          {recentBriefings.length > 0 && (
+            <div className="rounded-lg border bg-card p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  CEO 브리핑
+                </h3>
+                <Link to="/ceo-chat" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  전체 보기 →
+                </Link>
+              </div>
+              <div className="flex flex-col gap-2">
+                {recentBriefings.map((item) => (
+                  <Link
+                    key={item.id}
+                    to="/ceo-chat"
+                    className="flex flex-col gap-0.5 rounded-md border border-border px-3 py-2 hover:bg-accent/50 transition-colors no-underline text-inherit"
+                  >
+                    <span className="text-sm font-medium truncate">{item.title}</span>
+                    <span className="text-xs text-muted-foreground line-clamp-1">{item.body}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid md:grid-cols-2 gap-4">
             {/* Recent Activity */}
