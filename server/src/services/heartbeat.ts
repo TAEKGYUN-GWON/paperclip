@@ -46,6 +46,8 @@ import { taskGraphService } from "./task-graph.js";
 import { dreamTaskService } from "./dream-task.js";
 import { coordinatorService } from "./coordinator.js";
 import { autoClaimService } from "./auto-claim.js";
+import { remotePlannerService, PLANNING_AGENT_SYSTEM_PROMPT } from "./remote-planner.js";
+import { planScannerService } from "./plan-scanner.js";
 import { worktreeLifecycleService } from "./worktree-lifecycle.js";
 import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./execution-workspaces.js";
 import { workspaceOperationService } from "./workspace-operations.js";
@@ -2944,6 +2946,26 @@ export function heartbeatService(db: Db) {
           context.paperclipCoordinatorMode = true;
         }
       }
+      // Phase 20: ULTRAPLAN — inject planning mode context for planner agents
+      {
+        const remotePlanner = remotePlannerService(db);
+        if (await remotePlanner.isEnabled()) {
+          const planSession = await remotePlanner.getActiveSessionForAgent(agent.id);
+          if (planSession) {
+            context.paperclipPlanningMode = {
+              sessionId: planSession.id,
+              sourceIssueId: planSession.sourceIssueId ?? undefined,
+              userFeedback: planSession.userFeedback ?? undefined,
+              rejectCount: planSession.rejectCount,
+            };
+            context.paperclipPlanningSystemPrompt = PLANNING_AGENT_SYSTEM_PROMPT;
+            logger.info(
+              { agentId: agent.id, planSessionId: planSession.id },
+              "Phase 20: injecting planning mode context",
+            );
+          }
+        }
+      }
       // Phase 8: pre:adapter 훅
       await hookRegistry.emit("pre:adapter", {
         runId: run.id,
@@ -3227,6 +3249,22 @@ export function heartbeatService(db: Db) {
           await coordinator.onWorkerComplete(agent.companyId, issueId, mappedOutcome);
         } catch (coordErr) {
           logger.warn({ err: coordErr, issueId }, "Phase 19: coordinator onWorkerComplete failed (non-fatal)");
+        }
+      }
+      // Phase 20: ULTRAPLAN — scan planner agent output for plan completion markers
+      if (context.paperclipPlanningMode) {
+        try {
+          const planMode = context.paperclipPlanningMode as { sessionId: string };
+          const planScanner = planScannerService(db);
+          const scanResult = await planScanner.scan(planMode.sessionId);
+          logger.info(
+            { planSessionId: planMode.sessionId, scanResult: scanResult.kind },
+            "Phase 20: plan scan result",
+          );
+          // If the scan detects a terminal state that changes DB status, it has already been
+          // handled inside planScannerService.scan(). Poll loop will notify message bus.
+        } catch (planScanErr) {
+          logger.warn({ err: planScanErr }, "Phase 20: plan scan failed (non-fatal)");
         }
       }
       // Phase 22: Worktree isolation — release worker worktree or schedule cleanup

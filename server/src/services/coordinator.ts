@@ -676,6 +676,30 @@ export function coordinatorService(db: Db) {
     return rows[0] ?? null;
   }
 
+  /**
+   * Phase 20: ULTRAPLAN — 세션이 계획 세션 모드인지 확인.
+   * config.sessionType === "planning"으로 식별한다.
+   * 계획 세션은 워커를 생성하지 않고 계획만 수립한다.
+   */
+  async function isPlanningSession(
+    companyId: string,
+    sessionId: string,
+  ): Promise<boolean> {
+    const rows = await db
+      .select({ config: coordinatorSessions.config })
+      .from(coordinatorSessions)
+      .where(
+        and(
+          eq(coordinatorSessions.id, sessionId),
+          eq(coordinatorSessions.companyId, companyId),
+        ),
+      )
+      .limit(1);
+
+    const cfg = rows[0]?.config as Record<string, unknown> | undefined;
+    return cfg?.sessionType === "planning";
+  }
+
   return {
     isEnabled,
     isCoordinatorAgent,
@@ -690,6 +714,7 @@ export function coordinatorService(db: Db) {
     buildCoordinatorPrompt,
     cancelSession,
     getActiveWorkerCount,
+    isPlanningSession,
   };
 }
 

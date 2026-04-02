@@ -16,3 +16,4 @@ export { llmRoutes } from "./llms.js";
 export { accessRoutes } from "./access.js";
 export { instanceSettingsRoutes } from "./instance-settings.js";
 export { mcpRoutes } from "./mcp.js";
+export { remotePlanningRoutes } from "./remote-planning.js";

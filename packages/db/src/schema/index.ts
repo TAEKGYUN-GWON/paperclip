@@ -64,3 +64,4 @@ export { workerTasks } from "./worker_tasks.js";
 export { permissionRequests } from "./permission_requests.js";
 export { mcpServers } from "./mcp_servers.js";
 export { workflowSteps } from "./workflow_steps.js";
+export { remotePlanSessions } from "./remote_plan_sessions.js";

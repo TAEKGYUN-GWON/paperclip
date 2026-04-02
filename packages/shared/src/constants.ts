@@ -238,6 +238,56 @@ export type McpServerStatus = (typeof MCP_SERVER_STATUSES)[number];
 export const MCP_SERVER_SCOPES = ["company", "project", "agent"] as const;
 export type McpServerScope = (typeof MCP_SERVER_SCOPES)[number];
 
+// ---------------------------------------------------------------------------
+// Phase 20: ULTRAPLAN Remote Plan Offload
+// ---------------------------------------------------------------------------
+
+/**
+ * Lifecycle status of a remote plan session.
+ * Adapted from Claude Code ExitPlanModeScanner ScanResult kinds + ccrSession status.
+ *
+ * State machine:
+ *   planning → needs_input (planner asks user) | plan_ready (plan complete)
+ *   plan_ready → approved | rejected (user reviews)
+ *   rejected → planning (re-plan with feedback)
+ *   approved → executing → completed | failed
+ *   any → expired | cancelled
+ */
+export const PLAN_SESSION_STATUSES = [
+  "planning",      // Planner agent is analyzing and producing the plan
+  "needs_input",   // Planner needs clarification from the user
+  "plan_ready",    // Plan produced, awaiting user review
+  "approved",      // User approved the plan
+  "rejected",      // User rejected (triggers re-planning)
+  "executing",     // Plan is being executed by coordinator/workflow
+  "completed",     // Execution finished successfully
+  "failed",        // Execution or planning failed
+  "expired",       // Session timed out (default 30 min)
+  "cancelled",     // User cancelled the session
+] as const;
+export type PlanSessionStatus = (typeof PLAN_SESSION_STATUSES)[number];
+
+/**
+ * High-level UI phase for displaying planning progress.
+ * Derived from PlanSessionStatus by planScannerService.derivePhase().
+ * Adapted from Claude Code UltraplanPhase union.
+ */
+export const PLAN_PHASES = ["running", "needs_input", "plan_ready"] as const;
+export type PlanPhase = (typeof PLAN_PHASES)[number];
+
+/**
+ * How an approved plan will be executed.
+ * "coordinator" → auto-creates a coordinator session and delegates worker tasks
+ * "workflow"    → triggers a declarative workflow via the routine system
+ * "single_agent" → assigns the source issue directly to a single agent
+ */
+export const PLAN_EXECUTION_TARGETS = [
+  "coordinator",
+  "workflow",
+  "single_agent",
+] as const;
+export type PlanExecutionTarget = (typeof PLAN_EXECUTION_TARGETS)[number];
+
 export const GOAL_LEVELS = ["company", "team", "agent", "task"] as const;
 export type GoalLevel = (typeof GOAL_LEVELS)[number];
 
