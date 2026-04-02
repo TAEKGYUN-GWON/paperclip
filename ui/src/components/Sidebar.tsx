@@ -11,6 +11,7 @@ import {
   Boxes,
   Repeat,
   Settings,
+  ClipboardList,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { SidebarSection } from "./SidebarSection";
@@ -103,6 +104,7 @@ export function Sidebar() {
           <SidebarNavItem to="/issues" label={t("sidebar.issues")} icon={CircleDot} />
           <SidebarNavItem to="/routines" label={t("sidebar.routines")} icon={Repeat} textBadge="Beta" textBadgeTone="amber" />
           <SidebarNavItem to="/goals" label={t("sidebar.goals")} icon={Target} />
+          <SidebarNavItem to="/plans" label={t("sidebar.plans")} icon={ClipboardList} textBadge="Beta" textBadgeTone="amber" />
         </SidebarSection>
 
         <SidebarProjects />

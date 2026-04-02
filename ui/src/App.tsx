@@ -44,6 +44,7 @@ import { CliAuthPage } from "./pages/CliAuth";
 import { InviteLandingPage } from "./pages/InviteLanding";
 import { NotFoundPage } from "./pages/NotFound";
 import { PlanReview } from "./pages/PlanReview";
+import { Plans } from "./pages/Plans";
 import { queryKeys } from "./lib/queryKeys";
 import { useCompany } from "./context/CompanyContext";
 import { useDialog } from "./context/DialogContext";
@@ -166,6 +167,7 @@ function boardRoutes() {
       <Route path="approvals/pending" element={<Approvals />} />
       <Route path="approvals/all" element={<Approvals />} />
       <Route path="approvals/:approvalId" element={<ApprovalDetail />} />
+      <Route path="plans" element={<Plans />} />
       <Route path="plans/:sessionId" element={<PlanReview />} />
       <Route path="costs" element={<Costs />} />
       <Route path="activity" element={<Activity />} />

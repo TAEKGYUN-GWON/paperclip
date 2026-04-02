@@ -17,6 +17,7 @@ export const en: Record<TranslationKeys, string> = {
   "sidebar.issues": "Issues",
   "sidebar.routines": "Routines",
   "sidebar.goals": "Goals",
+  "sidebar.plans": "Plans (ULTRAPLAN)",
   "sidebar.org": "Org",
   "sidebar.skills": "Skills",
   "sidebar.costs": "Costs",

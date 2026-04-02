@@ -15,6 +15,7 @@ export const ko = {
   "sidebar.issues": "이슈",
   "sidebar.routines": "루틴",
   "sidebar.goals": "목표",
+  "sidebar.plans": "계획 (ULTRAPLAN)",
   "sidebar.org": "조직",
   "sidebar.skills": "스킬",
   "sidebar.costs": "비용",

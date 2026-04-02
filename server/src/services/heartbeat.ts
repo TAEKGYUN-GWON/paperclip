@@ -2933,7 +2933,37 @@ export function heartbeatService(db: Db) {
       // Phase 19: Coordinator Mode — inject orchestrator prompt and status
       if (issueId) {
         const coordinator = coordinatorService(db);
-        const isCoord = await coordinator.isCoordinatorAgent(agent.companyId, agent.id);
+        let isCoord = await coordinator.isCoordinatorAgent(agent.companyId, agent.id);
+        // Auto-start coordinator session if runtimeConfig.coordinator.autoStart is true,
+        // or if this is a CEO agent (CEOs coordinate by default unless explicitly disabled)
+        if (!isCoord) {
+          const rCfg = parseObject(agent.runtimeConfig);
+          const coordCfg = parseObject(rCfg.coordinator);
+          const autoStart =
+            coordCfg.autoStart === true ||
+            (agent.role === "ceo" && coordCfg.autoStart !== false);
+          if (autoStart) {
+            const featureOk = await coordinator.isEnabled();
+            if (featureOk) {
+              try {
+                await coordinator.startCoordination({
+                  companyId: agent.companyId,
+                  coordinatorAgentId: agent.id,
+                  parentIssueId: issueId,
+                  delegationStrategy:
+                    typeof coordCfg.workerStrategy === "string"
+                      ? (coordCfg.workerStrategy as "round_robin" | "load_balance" | "capability_match")
+                      : "round_robin",
+                  maxParallelWorkers:
+                    typeof coordCfg.maxWorkers === "number" ? coordCfg.maxWorkers : 5,
+                });
+                isCoord = true;
+              } catch {
+                // session may already exist or feature flag off — continue without coordinator mode
+              }
+            }
+          }
+        }
         if (isCoord) {
           const prompt = await coordinator.buildCoordinatorPrompt(
             agent.companyId,

@@ -223,7 +223,7 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "mcp";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "mcp" | "runtime";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
@@ -232,6 +232,7 @@ function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "budget") return "budget";
   if (value === "runs") return value;
   if (value === "mcp") return "mcp";
+  if (value === "runtime") return "runtime";
   return "dashboard";
 }
 
@@ -916,6 +917,7 @@ export function AgentDetail() {
               { value: "instructions", label: "Instructions" },
               { value: "skills", label: "Skills" },
               { value: "configuration", label: "Configuration" },
+              { value: "runtime", label: "Runtime" },
               { value: "mcp", label: "MCP" },
               { value: "runs", label: "Runs" },
               { value: "budget", label: "Budget" },
@@ -1029,6 +1031,13 @@ export function AgentDetail() {
         <AgentSkillsTab
           agent={agent}
           companyId={resolvedCompanyId ?? undefined}
+        />
+      )}
+
+      {activeView === "runtime" && resolvedCompanyId && (
+        <AgentRuntimeTab
+          agent={agent}
+          companyId={resolvedCompanyId}
         />
       )}
 
@@ -4382,6 +4391,218 @@ function AgentMcpTab({ agentId, companyId }: { agentId: string; companyId: strin
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Runtime Config Tab ─────────────────────────────────────────────────────
+
+function RuntimeToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      className={cn(
+        "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "bg-green-600" : "bg-muted",
+      )}
+      onClick={() => onChange(!checked)}
+    >
+      <span
+        className={cn(
+          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+          checked ? "translate-x-4.5" : "translate-x-0.5",
+        )}
+      />
+    </button>
+  );
+}
+
+function AgentRuntimeTab({
+  agent,
+  companyId,
+}: {
+  agent: AgentDetailRecord;
+  companyId: string;
+}) {
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+
+  const rc = ((agent.runtimeConfig ?? {}) as Record<string, unknown>);
+  const coord = ((rc.coordinator ?? {}) as Record<string, unknown>);
+  const autoClaim = ((rc.autoClaim ?? {}) as Record<string, unknown>);
+
+  const [coordAutoStart, setCoordAutoStart] = useState(coord.autoStart === true);
+  const [coordStrategy, setCoordStrategy] = useState<string>(
+    typeof coord.workerStrategy === "string" ? coord.workerStrategy : "round_robin",
+  );
+  const [coordMaxWorkers, setCoordMaxWorkers] = useState<number>(
+    typeof coord.maxWorkers === "number" ? coord.maxWorkers : 5,
+  );
+  const [autoClaimEnabled, setAutoClaimEnabled] = useState(autoClaim.enabled === true);
+  const [autoClaimMax, setAutoClaimMax] = useState<number>(
+    typeof autoClaim.maxConcurrentClaims === "number" ? autoClaim.maxConcurrentClaims : 1,
+  );
+  const [autoClaimPriority, setAutoClaimPriority] = useState<string>(
+    typeof autoClaim.priorityOrder === "string" ? autoClaim.priorityOrder : "priority_first",
+  );
+  const [autoClaimDeps, setAutoClaimDeps] = useState(
+    autoClaim.respectDependencies !== false,
+  );
+  const [saved, setSaved] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: (newRc: Record<string, unknown>) =>
+      agentsApi.update(agent.id, { runtimeConfig: newRc }, companyId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.id) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.agents.detail(agent.urlKey) });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    },
+    onError: (err) => {
+      pushToast({
+        title: "Save failed",
+        body: err instanceof Error ? err.message : "Could not save runtime config",
+        tone: "error",
+      });
+    },
+  });
+
+  function save() {
+    updateMutation.mutate({
+      ...rc,
+      coordinator: {
+        ...coord,
+        autoStart: coordAutoStart,
+        workerStrategy: coordStrategy,
+        maxWorkers: coordMaxWorkers,
+      },
+      autoClaim: {
+        ...autoClaim,
+        enabled: autoClaimEnabled,
+        maxConcurrentClaims: autoClaimMax,
+        priorityOrder: autoClaimPriority,
+        respectDependencies: autoClaimDeps,
+      },
+    });
+  }
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      {/* Coordinator Mode */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Coordinator Mode</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            이슈 실행 시 이 에이전트를 코디네이터로 동작시켜 여러 워커에게 작업을 위임합니다.
+            Instance Settings에서 <code className="text-xs">coordinator_mode</code> 플래그가 활성화되어 있어야 합니다.
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm">Auto-start coordinator session</div>
+            <div className="text-xs text-muted-foreground">이슈 실행 시 자동으로 코디네이터 세션 시작</div>
+          </div>
+          <RuntimeToggle checked={coordAutoStart} onChange={setCoordAutoStart} />
+        </div>
+        {coordAutoStart && (
+          <>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">Worker strategy</div>
+              <select
+                value={coordStrategy}
+                onChange={(e) => setCoordStrategy(e.target.value)}
+                className="text-sm border border-border rounded-md px-2 py-1 bg-background"
+              >
+                <option value="round_robin">Round Robin — 순서대로 배정</option>
+                <option value="load_balance">Load Balance — 가장 한가한 에이전트</option>
+                <option value="capability_match">Capability Match — 역량 기준 매칭</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">Max workers</div>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={coordMaxWorkers}
+                onChange={(e) => setCoordMaxWorkers(Number(e.target.value))}
+                className="w-20 text-sm border border-border rounded-md px-2 py-1 bg-background text-right"
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Auto-Claim */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold">Auto-Claim</h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            유휴 상태일 때 할당되지 않은 이슈를 자동으로 클레임합니다.
+            Instance Settings에서 <code className="text-xs">auto_claim</code> 플래그가 활성화되어 있어야 합니다.
+          </p>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-sm">Enabled</div>
+            <div className="text-xs text-muted-foreground">자동 이슈 클레임 활성화</div>
+          </div>
+          <RuntimeToggle checked={autoClaimEnabled} onChange={setAutoClaimEnabled} />
+        </div>
+        {autoClaimEnabled && (
+          <>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">Max concurrent claims</div>
+              <input
+                type="number"
+                min={1}
+                max={10}
+                value={autoClaimMax}
+                onChange={(e) => setAutoClaimMax(Number(e.target.value))}
+                className="w-20 text-sm border border-border rounded-md px-2 py-1 bg-background text-right"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div className="text-sm">Priority order</div>
+              <select
+                value={autoClaimPriority}
+                onChange={(e) => setAutoClaimPriority(e.target.value)}
+                className="text-sm border border-border rounded-md px-2 py-1 bg-background"
+              >
+                <option value="priority_first">Priority first — 우선순위 높은 것부터</option>
+                <option value="created_first">Created first — 생성 순서대로</option>
+                <option value="dependency_first">Dependency first — 의존성 없는 것부터</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="text-sm">Respect dependencies</div>
+                <div className="text-xs text-muted-foreground">선행 이슈가 미완료면 클레임하지 않음</div>
+              </div>
+              <RuntimeToggle checked={autoClaimDeps} onChange={setAutoClaimDeps} />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button onClick={save} disabled={updateMutation.isPending}>
+          {updateMutation.isPending ? "Saving…" : saved ? "Saved!" : "Save Runtime Config"}
+        </Button>
+        {saved && <span className="text-xs text-green-600">변경 사항이 저장되었습니다.</span>}
+      </div>
     </div>
   );
 }
