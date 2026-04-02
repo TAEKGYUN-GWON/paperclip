@@ -7,6 +7,7 @@ import {
   type ClaudeLoginResult,
   type AgentPermissionUpdate,
 } from "../api/agents";
+import { mcpApi, type McpServerRecord, type RegisterMcpServerInput } from "../api/mcp";
 import { companySkillsApi } from "../api/companySkills";
 import { budgetsApi } from "../api/budgets";
 import { heartbeatsApi } from "../api/heartbeats";
@@ -222,7 +223,7 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "mcp";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
@@ -230,6 +231,7 @@ function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "skills") return "skills";
   if (value === "budget") return "budget";
   if (value === "runs") return value;
+  if (value === "mcp") return "mcp";
   return "dashboard";
 }
 
@@ -651,7 +653,9 @@ export function AgentDetail() {
               ? "runs"
               : activeView === "budget"
                 ? "budget"
-              : "dashboard";
+                : activeView === "mcp"
+                  ? "mcp"
+                  : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -912,6 +916,7 @@ export function AgentDetail() {
               { value: "instructions", label: "Instructions" },
               { value: "skills", label: "Skills" },
               { value: "configuration", label: "Configuration" },
+              { value: "mcp", label: "MCP" },
               { value: "runs", label: "Runs" },
               { value: "budget", label: "Budget" },
             ]}
@@ -1024,6 +1029,13 @@ export function AgentDetail() {
         <AgentSkillsTab
           agent={agent}
           companyId={resolvedCompanyId ?? undefined}
+        />
+      )}
+
+      {activeView === "mcp" && resolvedCompanyId && (
+        <AgentMcpTab
+          agentId={agent.id}
+          companyId={resolvedCompanyId}
         />
       )}
 
@@ -4071,6 +4083,303 @@ function KeysTab({ agentId, companyId }: { agentId: string; companyId?: string }
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---- Agent MCP Tab ---- */
+
+type McpFormState = {
+  name: string;
+  displayName: string;
+  transportType: "http" | "sse" | "stdio";
+  url: string;
+  command: string;
+  args: string;
+};
+
+const EMPTY_MCP_FORM: McpFormState = {
+  name: "",
+  displayName: "",
+  transportType: "http",
+  url: "",
+  command: "",
+  args: "",
+};
+
+function AgentMcpTab({ agentId, companyId }: { agentId: string; companyId: string }) {
+  const queryClient = useQueryClient();
+  const { pushToast } = useToast();
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [form, setForm] = useState<McpFormState>(EMPTY_MCP_FORM);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+
+  const { data: servers, isLoading } = useQuery({
+    queryKey: ["mcp-servers", companyId, "agent", agentId],
+    queryFn: () => mcpApi.listServers(companyId),
+  });
+
+  const agentServers = (servers ?? []).filter(
+    (s) => s.scope === "company" || (s.scope === "agent" && s.scopeId === agentId),
+  );
+
+  const createServer = useMutation({
+    mutationFn: (data: RegisterMcpServerInput) => mcpApi.createServer(companyId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers", companyId] });
+      setShowAddForm(false);
+      setForm(EMPTY_MCP_FORM);
+      setFormError(null);
+      pushToast({ title: "MCP server added", tone: "success" });
+    },
+    onError: (err) => {
+      setFormError(err instanceof Error ? err.message : "Failed to add server");
+    },
+  });
+
+  const deleteServer = useMutation({
+    mutationFn: (serverId: string) => mcpApi.deleteServer(companyId, serverId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers", companyId] });
+      pushToast({ title: "MCP server removed", tone: "success" });
+    },
+  });
+
+  async function handleConnect(serverId: string) {
+    setConnectingId(serverId);
+    try {
+      const result = await mcpApi.connectServer(companyId, serverId);
+      queryClient.invalidateQueries({ queryKey: ["mcp-servers", companyId] });
+      pushToast({
+        title: "Connected",
+        body: `Discovered ${(result.tools as unknown[]).length} tool(s)`,
+        tone: "success",
+      });
+    } catch (err) {
+      pushToast({
+        title: "Connection failed",
+        body: err instanceof Error ? err.message : "Could not connect",
+        tone: "error",
+      });
+    } finally {
+      setConnectingId(null);
+    }
+  }
+
+  function buildConfig(): Record<string, unknown> {
+    if (form.transportType === "stdio") {
+      return {
+        command: form.command.trim(),
+        args: form.args.trim() ? form.args.trim().split(/\s+/) : [],
+      };
+    }
+    return { url: form.url.trim() };
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    if (!form.name.trim()) { setFormError("Name is required"); return; }
+    if (form.transportType === "stdio" && !form.command.trim()) {
+      setFormError("Command is required for stdio"); return;
+    }
+    if ((form.transportType === "http" || form.transportType === "sse") && !form.url.trim()) {
+      setFormError("URL is required"); return;
+    }
+    createServer.mutate({
+      name: form.name.trim(),
+      displayName: form.displayName.trim() || form.name.trim(),
+      scope: "agent",
+      scopeId: agentId,
+      transportType: form.transportType,
+      config: buildConfig(),
+    });
+  }
+
+  return (
+    <div className="max-w-3xl space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-medium">MCP Servers</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Model Context Protocol servers that extend this agent's tool set.
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => { setShowAddForm((v) => !v); setFormError(null); }}
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" />
+          Add server
+        </Button>
+      </div>
+
+      {showAddForm && (
+        <form onSubmit={handleSubmit} className="border border-border rounded-lg p-4 space-y-4">
+          <h4 className="text-sm font-medium">New MCP server</h4>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+              <Input
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="my-server"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Display name</label>
+              <Input
+                value={form.displayName}
+                onChange={(e) => setForm((f) => ({ ...f, displayName: e.target.value }))}
+                placeholder="My Server (optional)"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground mb-1 block">Transport</label>
+            <div className="flex gap-2">
+              {(["http", "sse", "stdio"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  className={cn(
+                    "px-3 py-1 rounded text-xs border transition-colors",
+                    form.transportType === t
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border hover:border-foreground/30",
+                  )}
+                  onClick={() => setForm((f) => ({ ...f, transportType: t }))}
+                >
+                  {t.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+          {(form.transportType === "http" || form.transportType === "sse") ? (
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">URL</label>
+              <Input
+                value={form.url}
+                onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
+                placeholder="https://mcp.example.com"
+                className="h-8 text-sm font-mono"
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Command</label>
+                <Input
+                  value={form.command}
+                  onChange={(e) => setForm((f) => ({ ...f, command: e.target.value }))}
+                  placeholder="npx"
+                  className="h-8 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">Args (space-separated)</label>
+                <Input
+                  value={form.args}
+                  onChange={(e) => setForm((f) => ({ ...f, args: e.target.value }))}
+                  placeholder="-y @modelcontextprotocol/server-filesystem /path"
+                  className="h-8 text-sm font-mono"
+                />
+              </div>
+            </div>
+          )}
+          {formError && <p className="text-xs text-destructive">{formError}</p>}
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={createServer.isPending}>
+              {createServer.isPending ? "Adding…" : "Add"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => { setShowAddForm(false); setFormError(null); }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
+        </div>
+      ) : agentServers.length === 0 ? (
+        <div className="border border-dashed border-border rounded-lg px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">No MCP servers configured.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Add a server above to extend this agent's available tools.
+          </p>
+        </div>
+      ) : (
+        <div className="border border-border divide-y divide-border rounded-lg">
+          {agentServers.map((server) => (
+            <div key={server.id} className="flex items-center gap-3 px-4 py-3">
+              <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{server.displayName}</span>
+                  <span className="text-xs font-mono text-muted-foreground">{server.name}</span>
+                  <span className={cn(
+                    "text-xs px-1.5 py-0.5 rounded",
+                    server.status === "active"
+                      ? "bg-green-500/10 text-green-600"
+                      : "bg-muted text-muted-foreground",
+                  )}>
+                    {server.status}
+                  </span>
+                  {server.scope === "company" && (
+                    <span className="text-xs bg-blue-500/10 text-blue-600 px-1.5 py-0.5 rounded">
+                      company
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground font-mono truncate">
+                  {server.transportType.toUpperCase()}
+                  {server.transportType !== "stdio"
+                    ? ` · ${(server.config.url as string) ?? ""}`
+                    : ` · ${(server.config.command as string) ?? ""}`}
+                </p>
+                {server.lastError && (
+                  <p className="text-xs text-destructive truncate">{server.lastError}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs"
+                  disabled={connectingId === server.id}
+                  onClick={() => handleConnect(server.id)}
+                >
+                  {connectingId === server.id
+                    ? <Loader2 className="h-3 w-3 animate-spin" />
+                    : "Connect"
+                  }
+                </Button>
+                {server.scope === "agent" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 text-destructive hover:text-destructive"
+                    onClick={() => deleteServer.mutate(server.id)}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

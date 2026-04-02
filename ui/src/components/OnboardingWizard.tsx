@@ -54,7 +54,8 @@ import {
   Check,
   Loader2,
   ChevronDown,
-  X
+  X,
+  FolderOpen
 } from "lucide-react";
 import { HermesIcon } from "./HermesIcon";
 
@@ -135,6 +136,12 @@ export function OnboardingWizard() {
   const [taskDescription, setTaskDescription] = useState(
     DEFAULT_TASK_DESCRIPTION
   );
+
+  // Step 4 (optional workspace)
+  const [workspacePath, setWorkspacePath] = useState("");
+
+  // Guard against concurrent submissions (prevents CEO duplication on double-click or Ctrl+Enter race)
+  const submittingRef = useRef(false);
 
   // Auto-grow textarea for task description
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -382,6 +389,8 @@ export function OnboardingWizard() {
   }
 
   async function handleStep1Next() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -413,12 +422,14 @@ export function OnboardingWizard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create company");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
 
   async function handleStep2Next() {
-    if (!createdCompanyId) return;
+    if (!createdCompanyId || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -483,6 +494,7 @@ export function OnboardingWizard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create agent");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -543,7 +555,8 @@ export function OnboardingWizard() {
   }
 
   async function handleLaunch() {
-    if (!createdCompanyId || !createdAgentId) return;
+    if (!createdCompanyId || !createdAgentId || submittingRef.current) return;
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
@@ -565,6 +578,20 @@ export function OnboardingWizard() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.projects.list(createdCompanyId)
         });
+
+        // Create workspace if a local folder was specified
+        if (workspacePath.trim()) {
+          await projectsApi.createWorkspace(
+            projectId,
+            {
+              name: "Default",
+              sourceType: "local_path",
+              cwd: workspacePath.trim(),
+              isPrimary: true,
+            },
+            createdCompanyId,
+          );
+        }
       }
 
       let issueRef = createdIssueRef;
@@ -597,6 +624,7 @@ export function OnboardingWizard() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create task");
     } finally {
+      submittingRef.current = false;
       setLoading(false);
     }
   }
@@ -604,6 +632,7 @@ export function OnboardingWizard() {
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
+      if (submittingRef.current) return;
       if (step === 1 && companyName.trim()) handleStep1Next();
       else if (step === 2 && agentName.trim()) handleStep2Next();
       else if (step === 3 && taskTitle.trim()) handleStep3Next();
@@ -1247,6 +1276,32 @@ export function OnboardingWizard() {
                       </div>
                       <Check className="h-4 w-4 text-green-500 shrink-0" />
                     </div>
+                    {workspacePath.trim() && (
+                      <div className="flex items-center gap-3 px-3 py-2.5">
+                        <FolderOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate font-mono">
+                            {workspacePath.trim()}
+                          </p>
+                          <p className="text-xs text-muted-foreground">Workspace</p>
+                        </div>
+                        <Check className="h-4 w-4 text-green-500 shrink-0" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground mb-1 block">
+                      Workspace folder <span className="text-muted-foreground/60">(optional)</span>
+                    </label>
+                    <input
+                      className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm font-mono outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
+                      placeholder="e.g. C:\Dev\myproject or /home/user/myproject"
+                      value={workspacePath}
+                      onChange={(e) => setWorkspacePath(e.target.value)}
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Local folder the agent will work in. You can also set this later in Project → Configuration → Codebase.
+                    </p>
                   </div>
                 </div>
               )}

@@ -207,6 +207,30 @@ export function mcpDiscoveryService(db: Db, toolRegistry?: PluginToolRegistry) {
       ) as Promise<McpServerRecord[]>;
   }
 
+  async function updateServer(
+    serverId: string,
+    companyId: string,
+    patch: Record<string, unknown>,
+  ): Promise<McpServerRecord | null> {
+    const allowed: Record<string, boolean> = {
+      displayName: true,
+      config: true,
+      transportType: true,
+      status: true,
+    };
+    const update: Record<string, unknown> = { updatedAt: new Date() };
+    for (const key of Object.keys(patch)) {
+      if (allowed[key]) update[key] = patch[key];
+    }
+
+    const rows = await db
+      .update(mcpServers)
+      .set(update)
+      .where(and(eq(mcpServers.id, serverId), eq(mcpServers.companyId, companyId)))
+      .returning();
+    return (rows[0] as McpServerRecord) ?? null;
+  }
+
   async function disableServer(serverId: string, companyId: string): Promise<void> {
     await db
       .update(mcpServers)
@@ -451,6 +475,7 @@ export function mcpDiscoveryService(db: Db, toolRegistry?: PluginToolRegistry) {
     registerServer,
     getServer,
     listActiveServers,
+    updateServer,
     disableServer,
     connectAndDiscoverTools,
     refreshAllServers,
