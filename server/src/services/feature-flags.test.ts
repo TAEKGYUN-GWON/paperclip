@@ -20,38 +20,38 @@ import * as instanceSettingsModule from "./instance-settings.js";
 // ──────────────────────────────────────────────────────────────────────────────
 
 describe("evaluateFlag", () => {
-  it("returns false for an unset flag (default)", () => {
-    expect(evaluateFlag("coordinator_mode", {})).toBe(false);
-    expect(evaluateFlag("coordinator_mode", null)).toBe(false);
-    expect(evaluateFlag("coordinator_mode", undefined)).toBe(false);
+  it("returns true for an unset flag (default — all implemented flags are on by default)", () => {
+    expect(evaluateFlag("coordinator_mode", {})).toBe(true);
+    expect(evaluateFlag("coordinator_mode", null)).toBe(true);
+    expect(evaluateFlag("coordinator_mode", undefined)).toBe(true);
   });
 
   it("returns stored value when flag is explicitly set to true", () => {
     expect(evaluateFlag("coordinator_mode", { coordinator_mode: true })).toBe(true);
   });
 
-  it("returns stored value when flag is explicitly set to false", () => {
+  it("returns stored value when flag is explicitly set to false (explicit opt-out)", () => {
     expect(evaluateFlag("dream_task", { dream_task: false })).toBe(false);
   });
 
-  it("ignores unrelated stored keys", () => {
-    expect(evaluateFlag("message_bus", { some_other_flag: true })).toBe(false);
+  it("falls back to default (true) when stored map has unrelated keys", () => {
+    expect(evaluateFlag("message_bus", { some_other_flag: true })).toBe(true);
   });
 });
 
 describe("evaluateAllFlags", () => {
-  it("returns all false by default with empty stored flags", () => {
+  it("returns all true by default with empty stored flags (all implemented flags are on by default)", () => {
     const all = evaluateAllFlags({});
     for (const val of Object.values(all)) {
-      expect(val).toBe(false);
+      expect(val).toBe(true);
     }
   });
 
   it("merges stored overrides into defaults", () => {
-    const all = evaluateAllFlags({ coordinator_mode: true, dream_task: true });
-    expect(all.coordinator_mode).toBe(true);
-    expect(all.dream_task).toBe(true);
-    expect(all.message_bus).toBe(false);
+    const all = evaluateAllFlags({ coordinator_mode: false, dream_task: false });
+    expect(all.coordinator_mode).toBe(false);
+    expect(all.dream_task).toBe(false);
+    expect(all.message_bus).toBe(true);
   });
 
   it("ignores stored keys not in known flag registry", () => {
@@ -95,9 +95,9 @@ describe("featureFlagsService", () => {
     mockUpdateExperimental.mockResolvedValue({});
   });
 
-  it("isEnabled returns false for unset flag", async () => {
+  it("isEnabled returns true for unset flag (default is on)", async () => {
     const svc = featureFlagsService({} as never);
-    expect(await svc.isEnabled("coordinator_mode")).toBe(false);
+    expect(await svc.isEnabled("coordinator_mode")).toBe(true);
   });
 
   it("isEnabled returns true when flag is stored as true", async () => {
@@ -149,16 +149,16 @@ describe("featureFlagsService", () => {
     expect(written.featureFlags.dream_task).toBe(true);
   });
 
-  it("getAllFlags returns complete snapshot with defaults", async () => {
+  it("getAllFlags returns complete snapshot with defaults (unset flags are true)", async () => {
     mockGetExperimental.mockResolvedValue({
       enableIsolatedWorkspaces: false,
       autoRestartDevServerWhenIdle: false,
-      featureFlags: { coordinator_mode: true },
+      featureFlags: { coordinator_mode: false },
     });
     const svc = featureFlagsService({} as never);
     const all = await svc.getAllFlags();
-    expect(all.coordinator_mode).toBe(true);
-    expect(all.dream_task).toBe(false);
+    expect(all.coordinator_mode).toBe(false);
+    expect(all.dream_task).toBe(true);
   });
 
   it("resetFlag removes key from stored flags", async () => {

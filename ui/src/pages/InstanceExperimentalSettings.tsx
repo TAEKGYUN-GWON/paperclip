@@ -68,6 +68,11 @@ const FEATURE_FLAGS: { key: string; label: string; description: string }[] = [
     label: "Streaming Feedback (Phase 14)",
     description: "실행 중 phase/toolUseCount/activity 실시간 스트리밍 피드백.",
   },
+  {
+    key: "ceo_chat",
+    label: "CEO Chat",
+    description: "CEO 1:1 채팅, 선제적 브리핑(BriefingAggregator), 단체 톡방(@멘션/#채널). 사이드바에 미읽음 배지 및 대시보드 브리핑 위젯 포함.",
+  },
 ];
 
 export function InstanceExperimentalSettings() {
@@ -220,7 +225,7 @@ export function InstanceExperimentalSettings() {
       <div className="space-y-2">
         <h2 className="text-sm font-semibold">Feature Flags (Phase 9–22)</h2>
         <p className="text-sm text-muted-foreground">
-          각 기능을 독립적으로 활성화/비활성화합니다. 기본값은 모두 비활성입니다.
+          각 기능을 독립적으로 활성화/비활성화합니다. 구현 완료된 기능은 기본값 활성입니다.
         </p>
       </div>
 

@@ -33,21 +33,21 @@ export type FeatureFlagKey =
   | "remote_planning"         // Phase 20: ULTRAPLAN remote planning offload
   | "ceo_chat";               // CEO Chat: CEO 1:1 채팅, 선제적 브리핑, 단체 톡방
 
-// Default state for every flag (false = feature is off until explicitly enabled)
+// Default state for every flag (구현 완료된 기능은 true — 인스턴스 설정에서 개별 비활성화 가능)
 const FLAG_DEFAULTS: Record<FeatureFlagKey, boolean> = {
-  context_compression: false,
-  streaming_feedback: false,
-  message_bus: false,
-  task_graph: false,
-  dream_task: false,
-  coordinator_mode: false,
-  auto_claim: false,
-  worktree_isolation: false,
-  permission_delegation: false,
-  declarative_workflows: false,
-  mcp_dynamic_tools: false,
-  remote_planning: false,
-  ceo_chat: false,
+  context_compression: true,
+  streaming_feedback: true,
+  message_bus: true,
+  task_graph: true,
+  dream_task: true,
+  coordinator_mode: true,
+  auto_claim: true,
+  worktree_isolation: true,
+  permission_delegation: true,
+  declarative_workflows: true,
+  mcp_dynamic_tools: true,
+  remote_planning: true,
+  ceo_chat: true,
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
