@@ -654,9 +654,11 @@ export function AgentDetail() {
               ? "runs"
               : activeView === "budget"
                 ? "budget"
-                : activeView === "mcp"
-                  ? "mcp"
-                  : "dashboard";
+                : activeView === "runtime"
+                  ? "runtime"
+                  : activeView === "mcp"
+                    ? "mcp"
+                    : "dashboard";
     if (routeAgentRef !== canonicalAgentRef || urlTab !== canonicalTab) {
       navigate(`/agents/${canonicalAgentRef}/${canonicalTab}`, { replace: true });
       return;
@@ -4442,7 +4444,10 @@ function AgentRuntimeTab({
   const coord = ((rc.coordinator ?? {}) as Record<string, unknown>);
   const autoClaim = ((rc.autoClaim ?? {}) as Record<string, unknown>);
 
-  const [coordAutoStart, setCoordAutoStart] = useState(coord.autoStart === true);
+  const isCeo = agent.role === "ceo";
+  const [coordAutoStart, setCoordAutoStart] = useState(
+    coord.autoStart === true || (isCeo && coord.autoStart !== false),
+  );
   const [coordStrategy, setCoordStrategy] = useState<string>(
     typeof coord.workerStrategy === "string" ? coord.workerStrategy : "round_robin",
   );
